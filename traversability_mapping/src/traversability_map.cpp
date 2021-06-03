@@ -299,16 +299,16 @@ public:
             cv::eigen2cv(cov, matCov); // copy data from eigen to cv::Mat
             cv::eigen(matCov, matEig, matVec); // find eigenvalues and eigenvectors for the covariance matrix
 
-            // float slopeAngle = std::acos(std::abs(matVec.at<float>(2, 2))) / M_PI * 180;
+            float slopeAngle = std::acos(std::abs(matVec.at<float>(2, 2))) / M_PI * 180;
             // // float occupancy = 1.0f / (1.0f + exp(-(slopeAngle - filterAngleLimit)));
 
             // float occupancy = 0.5 * (slopeAngle / filterAngleLimit)
             //                 + 0.5 * (maxDifference / filterHeightLimit);
 
-            // if (slopeAngle > filterAngleLimit || maxDifference > filterHeightLimit)
-            //     thisPoint.intensity = 100;
-
-            updateCellOccupancy(thisCell, &thisPoint);
+            if (slopeAngle > filterAngleLimit) {
+                thisPoint.intensity = 100;
+                updateCellOccupancy(thisCell, &thisPoint);
+            }
         }
     }
 

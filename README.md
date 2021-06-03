@@ -1,28 +1,13 @@
 # Traversability Mapping and Motion Planning
-
-This repository contains code for a traversability mapping and motion plannign system for ROS compatible UGVs. The system takes in point cloud from a Velodyne VLP-16 Lidar and outputs a traversability map for autonomous navigation in real-time. A demonstration of the system can be found here -> https://www.youtube.com/watch?v=4pdBpeRGXmw
+This is a repository for traversability mapping for UGVs in ROS. The code is modified on the repository [Traversability Mapping](https://github.com/TixiaoShan/traversability_mapping).
 
 
 ## Get Started
 
 - Install [ROS](http://www.ros.org/install/).
 
-- Install [LeGO-LOAM](https://github.com/RobustFieldAutonomyLab/LeGO-LOAM).
+- Install [ROS Navigation stack](http://wiki.ros.org/navigation). You can install it by running ```sudo apt-get install ros-version-navigation```. If you are using other versions of ROS, replace indigo in the command with your ROS version.
 
-- Install [ROS Navigation stack](http://wiki.ros.org/navigation). You can install it by running ```sudo apt-get install ros-indigo-navigation```. If you are using other versions of ROS, replace indigo in the command with your ROS version.
-
-
-## Compile
-
-You can use the following commands to download and compile the package.
-
-```
-cd ~/catkin_ws/src
-git clone https://github.com/TixiaoShan/traversability_mapping.git
-cd ..
-catkin_make -j1
-```
-When you compile the code for the first time, you need to add "-j1" behind "catkin_make" for generating some message types. "-j1" is not needed for future compiling.
 
 ## Run the System (in simulation)
 
@@ -30,21 +15,29 @@ When you compile the code for the first time, you need to add "-j1" behind "catk
 ```
 roslaunch traversability_mapping offline.launch
 ```
+or
+```
+roslaunch traversability_mapping dyx.launch
+```
+and set ```use_sim_time``` as ```true```
 
 2. Play existing bag files:
 ```
-rosbag play *.bag --clock --topic /velodyne_points /imu/data
+rosbag play *.bag --clock --topic /velodyne_points
 ```
-Notes: our system only needs /velodyne_points for input from bag files. However, a 3D SLAM method usually needs /imu/data.
 
 ## Run the System (with real robot)
 
 Run the launch file:
-```
+<!-- ```
 roslaunch traversability_mapping online.launch
+``` -->
 ```
+roslaunch traversability_mapping dyx.launch
+```
+and set ```use_sim_time``` as ```false```
 
-## Cite *Traversability_Mapping*
+<!-- ## Cite *Traversability_Mapping*
 
 Thank you for citing our paper if you use any of this code: 
 ```
@@ -54,4 +47,4 @@ Thank you for citing our paper if you use any of this code:
   booktitle={In Proceedings of the 2nd Annual Conference on Robot Learning},
   year={2018}
 }
-```
+``` -->

@@ -53,7 +53,7 @@ public:
         nanPoint.y = std::numeric_limits<float>::quiet_NaN();
         nanPoint.z = std::numeric_limits<float>::quiet_NaN();
         nanPoint.intensity = -1;
-
+        
         allocateMemory();
 
         pointcloud2laserscanInitialization();
@@ -185,7 +185,7 @@ public:
 
     void extractRawCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
         // ROS msg -> PCL cloud
-        // ROS_INFO_STREAM("LeGO-LOAM Preprocess Mode!");
+        // This function need LeGO-LOAM input pointcloud
         pcl::fromROSMsg(*laserCloudMsg, *laserCloudIn);
         int nPoints = laserCloudIn->points.size();
         // cout << "valid cloud size = " << nPoints << endl;
@@ -205,7 +205,7 @@ public:
 
     void extractRawCloud(){
         // ROS msg -> PCL cloud
-        // ROS_INFO_STREAM("Raw Cloud Mode!");
+        // This function takes need call of function "velodyne2RangeCloud"
         int nPoints = laserCloudIn->points.size();
         // cout << "valid cloud size = " << nPoints << endl;
         // extract range info
