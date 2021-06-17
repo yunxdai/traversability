@@ -16,7 +16,6 @@ private:
     // Point Cloud
     pcl::PointCloud<PointType>::Ptr laserCloudRaw; // raw cloud from /velodyne_points
     pcl::PointCloud<PointType>::Ptr laserCloudIn; // projected full velodyne cloud
-    pcl::PointCloud<PointXYZIR>::Ptr laserCloudInRing; // full cloud with ring 
     pcl::PointCloud<PointType>::Ptr laserCloudOut; // filtered and downsampled point cloud
     pcl::PointCloud<PointType>::Ptr laserCloudObstacles; // cloud for saving points that are classified as obstables, convert them to laser scan
     // Transform Listener
@@ -31,7 +30,6 @@ private:
     // Matrice
     cv::Mat obstacleMatrix; // -1 - invalid, 0 - free, 1 - obstacle
     cv::Mat rangeMatrix; // -1 - invalid, >0 - valid range value
-    cv::Mat intensityMatrix;
     // laser scan message
     sensor_msgs::LaserScan laserScan;
     // for downsample
@@ -44,8 +42,8 @@ private:
 public:
     TraversabilityFilter():
         nh("~"){
-        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/full_cloud_info", 5, &TraversabilityFilter::cloudHandler, this);
-        subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
+        subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/full_cloud_info", 5, &TraversabilityFilter::cloudHandler, this);
+        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
         pubCloud = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud", 5);
         pubCloudVisualHiRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_high_res", 5);
         pubCloudVisualLowRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_low_res", 5);
@@ -64,16 +62,16 @@ public:
     void allocateMemory(){
         
         laserCloudRaw.reset(new pcl::PointCloud<PointType>());
-        laserCloudInRing.reset(new pcl::PointCloud<PointXYZIR>());
 
         laserCloudIn.reset(new pcl::PointCloud<PointType>());
         laserCloudIn->points.resize(N_SCAN * Horizon_SCAN);
+
         laserCloudOut.reset(new pcl::PointCloud<PointType>());
         laserCloudObstacles.reset(new pcl::PointCloud<PointType>());
 
         obstacleMatrix = cv::Mat(N_SCAN, Horizon_SCAN, CV_32S, cv::Scalar::all(-1));
         rangeMatrix =  cv::Mat(N_SCAN, Horizon_SCAN, CV_32F, cv::Scalar::all(-1));
-        intensityMatrix =  cv::Mat(N_SCAN, Horizon_SCAN, CV_32F, cv::Scalar::all(-1));
+
         laserCloudMatrix.resize(N_SCAN);
         for (int i = 0; i < N_SCAN; ++i)
             laserCloudMatrix[i].resize(Horizon_SCAN);
@@ -106,7 +104,7 @@ public:
 
         obstacleMatrix = cv::Mat(N_SCAN, Horizon_SCAN, CV_32S, cv::Scalar::all(-1));
         rangeMatrix =  cv::Mat(N_SCAN, Horizon_SCAN, CV_32F, cv::Scalar::all(-1));
-        intensityMatrix =  cv::Mat(N_SCAN, Horizon_SCAN, CV_32F, cv::Scalar::all(-1));
+
         for (int i = 0; i < filterHeightMapArrayLength; ++i){
             for (int j = 0; j < filterHeightMapArrayLength; ++j){
                 initFlag[i][j] = false;
@@ -122,11 +120,11 @@ public:
 
     void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
         
-        velodyne2RangeCloud(laserCloudMsg);
+        // velodyne2RangeCloud(laserCloudMsg);
         
-        extractRawCloud();
+        // extractRawCloud();
 
-        // extractRawCloud(laserCloudMsg);
+        extractRawCloud(laserCloudMsg);
 
         if (transformCloud() == false) return;
 
@@ -153,18 +151,9 @@ public:
         pcl::fromROSMsg(*laserCloudMsg, *laserCloudRaw);
         std::vector<int> indices;
         pcl::removeNaNFromPointCloud(*laserCloudRaw,*laserCloudRaw,indices);
-        if (useCloudRing == true) {
-            pcl::fromROSMsg(*laserCloudMsg, *laserCloudInRing);
-            if (laserCloudInRing->is_dense == false) {
-                ROS_ERROR("Point cloud is not in dense format, please remove NaN points first!");
-                ros::shutdown();
-            }
-        }
-
         size_t cloudSize = laserCloudRaw->points.size();
         // cout << "raw cloud size = " << cloudSize << endl;
-        // PointType thisPoint;
-        PointXYZIR thisPoint;
+        PointType thisPoint;
         float verticalAngle, horizonAngle, range;
         size_t rowIdn, columnIdn, index;
 
@@ -172,15 +161,10 @@ public:
             thisPoint.x = laserCloudRaw->points[i].x;
             thisPoint.y = laserCloudRaw->points[i].y;
             thisPoint.z = laserCloudRaw->points[i].z;
-            thisPoint.intensity = laserCloudRaw->points[i].intensity;
-            if (useCloudRing == true) {
-                rowIdn = laserCloudInRing->points[i].ring;
-            }
-            else {
-                verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y)) * 180 / M_PI;
-                rowIdn = (verticalAngle + ang_bottom) / ang_res_y;
-            }
             
+            verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y)) * 180 / M_PI;
+            rowIdn = (verticalAngle + ang_bottom) / ang_res_y;
+
             if (rowIdn < 0 || rowIdn >= N_SCAN) continue;
 
             horizonAngle = atan2(thisPoint.x, thisPoint.y) * 180 / M_PI;
@@ -193,16 +177,8 @@ public:
             range = sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y + thisPoint.z);
             if (range < sensorMinimumRange) continue;
             index = columnIdn + rowIdn * Horizon_SCAN;
-            // laserCloudIn->points[index] = thisPoint;
-
-            PointType tempPoint;
-            tempPoint.x = thisPoint.x;
-            tempPoint.y = thisPoint.y;
-            tempPoint.z = thisPoint.z;
-            laserCloudIn->points[index] = tempPoint;
+            laserCloudIn->points[index] = thisPoint;
             laserCloudIn->points[index].intensity = range;
-
-            intensityMatrix.at<float>(rowIdn, columnIdn) = thisPoint.intensity;
         }
     }
 
@@ -230,10 +206,6 @@ public:
     void extractRawCloud(){
         // ROS msg -> PCL cloud
         // This function takes need call of function "velodyne2RangeCloud"
-        // Eigen::MatrixXf intensity_mat;
-        // cv::cv2eigen(intensityMatrix, intensity_mat);
-        // std::cout << intensity_mat << std::endl;
-        // std::cout << "-----------------------" << std::endl;
         int nPoints = laserCloudIn->points.size();
         // cout << "valid cloud size = " << nPoints << endl;
         // extract range info
@@ -241,7 +213,7 @@ public:
             for (int j = 0; j < Horizon_SCAN; ++j){
                 int index = j  + i * Horizon_SCAN;
                 // skip NaN point
-                if (laserCloudIn->points[index].intensity == std::numeric_limits<float>::quiet_NaN()) continue;
+                if (laserCloudIn->points[index].intensity == std::numeric_limits<float>::quiet_NaN()) continue; // index在points中越界（但是为什么会越界md）
                 // save range info
                 rangeMatrix.at<float>(i, j) = laserCloudIn->points[index].intensity;
                 // reset obstacle status to 0 - free 
@@ -288,7 +260,6 @@ public:
         }
 
         slopeFilter();
-        intensityFilter();
     }
 
     void positiveCurbFilter(){
@@ -404,24 +375,7 @@ public:
         }
     }
 
-    void intensityFilter() {
-        for (int i = 0; i < N_SCAN; i++) {
-            for (int j = 0; j < Horizon_SCAN; j++) {
-                // Point that has been verified by other filters
-                if (obstacleMatrix.at<int>(i, j) == 1)
-                    continue;
-                if (rangeMatrix.at<float>(i, j) == -1 || rangeMatrix.at<float>(i+1, j) == -1)
-                    continue;
-                // point is too far away, skip comparison since it can be inaccurate
-                if (rangeMatrix.at<float>(i, j) > sensorRangeLimit)
-                    continue;
-                if (intensityMatrix.at<float>(i,j) > intensityLimit) {
-                    obstacleMatrix.at<int>(i,j) = 1;
-                    continue;
-                }
-            }
-        }
-    }
+    
 
     void extractFilteredCloud(){
         for (int i = 0; i < scanNumMax; ++i){

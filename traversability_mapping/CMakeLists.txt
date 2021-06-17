@@ -23,10 +23,15 @@ find_package(catkin REQUIRED COMPONENTS
   # planner plugin
   pluginlib
   nav_core
+  # grid map
+  grid_map_core
+  grid_map_ros
+  grid_map_msgs
 )
 
 find_package(PCL REQUIRED QUIET)
 find_package(OpenCV REQUIRED QUIET)
+find_package(Eigen3 REQUIRED)
 
 catkin_package(
   INCLUDE_DIRS include

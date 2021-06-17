@@ -109,6 +109,7 @@ public:
         pcl::fromROSMsg(*laserCloudMsg, *laserCloud);
         // Register New Scan
         updateElevationMap();
+        // ROS_INFO_STREAM(observingList1.size());
         // publish local occupancy grid map
         publishMap();
     }
@@ -137,6 +138,7 @@ public:
 
     void updateCellObservationTime(mapCell_t *thisCell){
         ++thisCell->observeTimes;
+        // 只要被观测到的时间超过阈值，就会被加到这个list（然后被丢去计算traversability）
         if (thisCell->observeTimes >= traversabilityObserveTimeTh)
             observingList1.push_back(thisCell);
     }
@@ -247,16 +249,20 @@ public:
         while (ros::ok()){
 
             traversabilityMapCalculation();
-
-            rate.sleep();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            // rate.sleep();
         }
     }
 
     void traversabilityMapCalculation(){
 
         // no new scan, return
-        if (observingList1.size() == 0)
+        if (observingList1.size() == 0) {
+            // ROS_INFO_STREAM("RETURN!");
             return;
+        }
+        
+        // 只对new scan采用grid level的计算，对已经观测到的部分只根据filter的结果进行更新
 
         observingList2 = observingList1;
         observingList1.clear();
@@ -287,15 +293,15 @@ public:
             float maxElevation = matPoints.col(2).maxCoeff();
             float maxDifference = maxElevation - minElevation;
 
-            if (maxDifference > filterHeightLimit){
-                thisPoint.intensity = 100;
-                updateCellOccupancy(thisCell, &thisPoint);
-                continue;
-            }
+            // if (maxDifference > filterHeightLimit){
+            //     thisPoint.intensity = 100;
+            //     updateCellOccupancy(thisCell, &thisPoint);
+            //     continue;
+            // }
 
             // find slope
-            Eigen::MatrixXf centered = matPoints.rowwise() - matPoints.colwise().mean();
-            Eigen::MatrixXf cov = (centered.adjoint() * centered);
+            Eigen::MatrixXf centered = matPoints.rowwise() - matPoints.colwise().mean(); // 中心化
+            Eigen::MatrixXf cov = (centered.adjoint() * centered); //协方差矩阵
             cv::eigen2cv(cov, matCov); // copy data from eigen to cv::Mat
             cv::eigen(matCov, matEig, matVec); // find eigenvalues and eigenvectors for the covariance matrix
 

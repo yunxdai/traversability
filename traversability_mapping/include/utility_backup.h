@@ -56,8 +56,6 @@
 #include <mutex> // c++11
 #include <chrono> // c++11
 
-#include <Eigen/Core>
-
 #include "marker/Marker.h"
 #include "marker/MarkerArray.h"
 
@@ -68,29 +66,12 @@
 
 using namespace std;
 
-struct PointXYZIR
-{
-    PCL_ADD_POINT4D
-    PCL_ADD_INTENSITY;
-    uint16_t ring;
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-} EIGEN_ALIGN16;
-
-POINT_CLOUD_REGISTER_POINT_STRUCT (PointXYZIR,  
-                                   (float, x, x) (float, y, y)
-                                   (float, z, z) (float, intensity, intensity)
-                                   (uint16_t, ring, ring)
-)
-
 typedef pcl::PointXYZI  PointType;
 typedef struct kdtree kdtree_t;
 typedef struct kdres kdres_t;
 
-// Point Cloud Type
-extern const bool useCloudRing = false;
-
 // Environment
-extern const bool urbanMapping = false;
+extern const bool urbanMapping = true;
 
 // VLP-16
 extern const int N_SCAN = 16;
@@ -117,12 +98,12 @@ extern const int scanNumMax = std::max(scanNumCurbFilter, scanNumSlopeFilter);
 // extern const float sensorRangeLimit = 12; // only keep points with in ...
 extern const float sensorRangeLimit = 12;   
 // extern const float filterHeightLimit = (urbanMapping == true) ? 0.1 : 0.15; // step diff threshold
-extern const float filterHeightLimit = (urbanMapping == true) ? 0.05 : 0.15; // step diff threshold         
+extern const float filterHeightLimit = (urbanMapping == true) ? 0.1 : 0.15; // step diff threshold         
 extern const float filterAngleLimit = 20; // slope angle threshold          
 extern const int filterHeightMapArrayLength = sensorRangeLimit*2 / mapResolution;
-extern const float intensityLimit = 10.0;
+
 // BGK Prediction Params
-extern const bool predictionEnableFlag = false;
+extern const bool predictionEnableFlag = true;
 extern const float predictionKernalSize = 0.2; // predict elevation within x meters
 
 // Occupancy Params
@@ -147,7 +128,7 @@ extern const float sensorHeight = 0.87;
 // Traversability Params
 // extern const int traversabilityObserveTimeTh = 10;
 // extern const float traversabilityCalculatingDistance = 8.0;
-extern const int traversabilityObserveTimeTh = 10;
+extern const int traversabilityObserveTimeTh = 3;
 extern const float traversabilityCalculatingDistance = 5.0;
 // Planning Cost Params
 extern const int NUM_COSTS = 3;
@@ -207,10 +188,7 @@ struct mapCell_t{
 
         elevation = -FLT_MAX;
         elevationVar = 1e3;
-        // 要加其他的field可以在这里加
-        // slope和roughness都是基于elevation的，应该不需要每个cell都维护
-        // intensity
-        // occupancy的模式应该改掉？改成score
+
         occupancy = 0; // initialized as unkown
         occupancyVar = 1e3;
     }

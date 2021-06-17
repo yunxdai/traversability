@@ -51,6 +51,13 @@
   <build_depend>interactive_markers</build_depend>
   <run_depend>interactive_markers</run_depend>
 
+  <build_depend>grid_map_core</build_depend>
+  <run_depend>grid_map_core</run_depend>
+  <build_depend>grid_map_ros</build_depend>
+  <run_depend>grid_map_ros</run_depend>
+  <build_depend>grid_map_msgs</build_depend>
+  <run_depend>grid_map_msgs</run_depend>
+
   <export>
     <nav_core plugin="${prefix}/src/library/tm_planner_plugin.xml" />
   </export>
