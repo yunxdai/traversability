@@ -288,7 +288,7 @@ public:
             negativeCurbFilter();
         }
 
-        slopeFilter();
+        // slopeFilter();
         // intensityFilter();
     }
 
