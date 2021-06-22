@@ -122,7 +122,7 @@ extern const float filterAngleLimit = 20; // slope angle threshold
 extern const int filterHeightMapArrayLength = sensorRangeLimit*2 / mapResolution;
 extern const float intensityLimit = 10.0;
 // BGK Prediction Params
-extern const bool predictionEnableFlag = false;
+extern const bool predictionEnableFlag = true;
 extern const float predictionKernalSize = 0.2; // predict elevation within x meters
 
 // Occupancy Params
@@ -132,7 +132,7 @@ extern const float large_log_odds = 100;
 extern const float max_log_odds_for_belief = 20;
 
 // 2D Map Publish Params
-extern const int localMapLength = 20; // length of the local occupancy grid map (meter)
+extern const int localMapLength = 200; // length of the local occupancy grid map (meter)
 extern const int localMapArrayLength = localMapLength / mapResolution;
 
 // Visualization Params
@@ -140,14 +140,14 @@ extern const float visualizationRadius = 50;
 extern const float visualizationFrequency = 2; // n, skip n scans then publish, n=0, visualize at each scan
 
 // Robot Params
-extern const float robotRadius = 0.2;
+extern const float robotRadius = 0.4;
 // extern const float sensorHeight = 0.5;
 extern const float sensorHeight = 0.87;
 
 // Traversability Params
 // extern const int traversabilityObserveTimeTh = 10;
 // extern const float traversabilityCalculatingDistance = 8.0;
-extern const int traversabilityObserveTimeTh = 10;
+extern const int traversabilityObserveTimeTh = 1;
 extern const float traversabilityCalculatingDistance = 5.0;
 // Planning Cost Params
 extern const int NUM_COSTS = 3;
@@ -199,7 +199,6 @@ struct mapCell_t{
     
     float occupancy, occupancyVar;
     float elevation, elevationVar;
-
     mapCell_t(){
         
         log_odds = 0.5;
@@ -211,8 +210,11 @@ struct mapCell_t{
         // slope和roughness都是基于elevation的，应该不需要每个cell都维护
         // intensity
         // occupancy的模式应该改掉？改成score
-        occupancy = 0; // initialized as unkown
+        // occupancy = 0; // initialized as unkown
+        // treat occupancy as a traversability score
+        occupancy = 0; // initialize as traversable
         occupancyVar = 1e3;
+        
     }
 
     void updatePoint(){

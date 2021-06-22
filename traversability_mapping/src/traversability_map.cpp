@@ -138,11 +138,11 @@ public:
 
     void updateCellObservationTime(mapCell_t *thisCell){
         ++thisCell->observeTimes;
-        // 只要被观测到的时间超过阈值，就会被加到这个list（然后被丢去计算traversability）
+        // 在当前输入中有对应点的cell，且被观测到的时间超过阈值，就会被加到这个list（然后被丢去计算traversability）
         if (thisCell->observeTimes >= traversabilityObserveTimeTh)
             observingList1.push_back(thisCell);
     }
-
+    
     void updateCellOccupancy(mapCell_t *thisCell, PointType *point){
         // Update log_odds
         float p;  // Probability of being occupied knowing current measurement.
@@ -167,7 +167,13 @@ public:
         // update cell
         thisCell->updateOccupancy(occupancy);
     }
-
+    /*
+    // 试一下完全从elevation map计算traversability
+    void updateCellOccupancy(mapCell_t *thisCell, PointType *point) {
+        float occupancy = point->intensity;
+        thisCell->updateOccupancy(occupancy);
+    }
+    */
     void updateCellElevation(mapCell_t *thisCell, PointType *point){
         // Kalman Filter: update cell elevation using Kalman filter
         // https://www.cs.cornell.edu/courses/cs4758/2012sp/materials/MI63slides.pdf
@@ -261,7 +267,7 @@ public:
             // ROS_INFO_STREAM("RETURN!");
             return;
         }
-        
+        // ROS_INFO_STREAM("Traversability Calculating!");
         // 只对new scan采用grid level的计算，对已经观测到的部分只根据filter的结果进行更新
 
         observingList2 = observingList1;
@@ -282,39 +288,75 @@ public:
                 continue;
             // Find neighbor cells of this center cell
             vector<float> xyzVector = findNeighborElevations(thisCell);
-
+            
             if (xyzVector.size() <= 2)
                 continue;
 
+            // matPoints: n * 3 matrix
             Eigen::MatrixXf matPoints = Eigen::Map<const Eigen::Matrix<float, -1, -1, Eigen::RowMajor>>(xyzVector.data(), xyzVector.size() / 3, 3);
-
+            
+            /*
             // min and max elevation
             float minElevation = matPoints.col(2).minCoeff();
             float maxElevation = matPoints.col(2).maxCoeff();
             float maxDifference = maxElevation - minElevation;
 
-            // if (maxDifference > filterHeightLimit){
-            //     thisPoint.intensity = 100;
-            //     updateCellOccupancy(thisCell, &thisPoint);
-            //     continue;
-            // }
+            if (maxDifference > filterHeightLimit){
+                thisPoint.intensity = 100;
+                updateCellOccupancy(thisCell, &thisPoint);
+                continue;
+            }
+            */
 
-            // find slope
+            
+            // slope
             Eigen::MatrixXf centered = matPoints.rowwise() - matPoints.colwise().mean(); // 中心化
             Eigen::MatrixXf cov = (centered.adjoint() * centered); //协方差矩阵
             cv::eigen2cv(cov, matCov); // copy data from eigen to cv::Mat
             cv::eigen(matCov, matEig, matVec); // find eigenvalues and eigenvectors for the covariance matrix
-
             float slopeAngle = std::acos(std::abs(matVec.at<float>(2, 2))) / M_PI * 180;
+
+            if (slopeAngle > 30.0) {
+                thisPoint.intensity = 100;
+                updateCellOccupancy(thisCell, &thisPoint);
+                continue;
+            }
+            
+
+            /*
+            // roughness
+            Eigen::Vector3f norm(matVec.at<float>(2,0),matVec.at<float>(2,1),matVec.at<float>(2,2)); // normal vector
+            Eigen::Vector3f mean = matPoints.colwise().mean();
+            float planeParam = mean.transpose() * norm;
+            Eigen::MatrixXf res = matPoints * norm;
+            res.array() -= planeParam;
+            double roughness = sqrt(res.squaredNorm() / (xyzVector.size() - 1));
+            double roughnessThresh_ = 0.01;
+            if (roughness > roughnessThresh_) {
+                thisPoint.intensity = 100;
+                updateCellOccupancy(thisCell, &thisPoint);    
+            }
+            */
+
+            // Debug
+            // std::cout <<"center point : (" << thisPoint.x << "," << thisPoint.y << ")";
+            // std::cout << " roughness = " << roughness << endl;
+            // if (thisPoint.y >= 1.5 && thisPoint.y <= 2.5 && std::abs(thisPoint.x) <= 5.0) {
+            //     std::cout <<"center point : (" << thisPoint.x << "," << thisPoint.y << ")";
+            //     std::cout << " neighbor points:" << endl << matPoints << endl;
+            //     std::cout << " slopeAngle = " << slopeAngle << endl;
+            // }
             // // float occupancy = 1.0f / (1.0f + exp(-(slopeAngle - filterAngleLimit)));
 
             // float occupancy = 0.5 * (slopeAngle / filterAngleLimit)
             //                 + 0.5 * (maxDifference / filterHeightLimit);
+            // thisPoint.intensity = slopeAngle;
+            
 
-            if (slopeAngle > filterAngleLimit) {
-                thisPoint.intensity = 100;
-                updateCellOccupancy(thisCell, &thisPoint);
-            }
+            // if (slopeAngle > filterAngleLimit) {
+            //     thisPoint.intensity = 100;
+            //     updateCellOccupancy(thisCell, &thisPoint);
+            // }
         }
     }
 
@@ -348,7 +390,8 @@ public:
                 // the neighbor cell
                 mapCell_t *thisCell = grid2Cell(&thisGrid);
                 // save neighbor cell for calculating traversability
-                if (thisCell->elevation != -FLT_MAX){
+                
+                if (thisCell->elevation != -FLT_MAX && !std::isnan(thisCell->xyz->z)){
                     xyzVector.push_back(thisCell->xyz->x);
                     xyzVector.push_back(thisCell->xyz->y);
                     xyzVector.push_back(thisCell->xyz->z);

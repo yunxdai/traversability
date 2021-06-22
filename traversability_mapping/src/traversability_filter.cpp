@@ -44,8 +44,9 @@ private:
 public:
     TraversabilityFilter():
         nh("~"){
-        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/full_cloud_info", 5, &TraversabilityFilter::cloudHandler, this);
-        subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
+        subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/full_cloud_info", 5, &TraversabilityFilter::cloudHandler, this);
+        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
+        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_cloud_registered_output", 5, &TraversabilityFilter::cloudHandler, this);
         pubCloud = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud", 5);
         pubCloudVisualHiRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_high_res", 5);
         pubCloudVisualLowRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_low_res", 5);
@@ -122,11 +123,11 @@ public:
 
     void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
         
-        velodyne2RangeCloud(laserCloudMsg);
+        // velodyne2RangeCloud(laserCloudMsg);
         
-        extractRawCloud();
+        // extractRawCloud();
 
-        // extractRawCloud(laserCloudMsg);
+        extractRawCloud(laserCloudMsg);
 
         if (transformCloud() == false) return;
 
@@ -288,7 +289,7 @@ public:
         }
 
         slopeFilter();
-        intensityFilter();
+        // intensityFilter();
     }
 
     void positiveCurbFilter(){
