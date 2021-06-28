@@ -43,20 +43,23 @@ private:
     // Lists for New Scan
     vector<mapCell_t*> observingList1; // thread 1: save new observed cells
     vector<mapCell_t*> observingList2; // thread 2: calculate traversability of new observed cells
-
+    
+    ros::Time initialTime_;
 public:
     TraversabilityMapping():
         nh("~"),
         pubCount(1),
         mapArrayCount(0){
         // subscribe to traversability filter
-        subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud", 5, &TraversabilityMapping::cloudHandler, this);
+        // subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud", 5, &TraversabilityMapping::cloudHandler, this);
+        // subscribe directly to raw pointcloud (for elevation mapping test)
+        subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud_visual_high_res", 5, &TraversabilityMapping::cloudHandler, this);
         // publish local occupancy and elevation grid map
         pubOccupancyMapLocal = nh.advertise<nav_msgs::OccupancyGrid> ("/occupancy_map_local", 5);
         pubOccupancyMapLocalHeight = nh.advertise<elevation_msgs::OccupancyElevation> ("/occupancy_map_local_height", 5);
         // publish elevation map for visualization
         pubElevationCloud = nh.advertise<sensor_msgs::PointCloud2> ("/elevation_pointcloud", 5);
-
+        initialTime_ = ros::Time::now();    
         allocateMemory(); 
     }
 
@@ -107,31 +110,33 @@ public:
             return;
         // Convert Point Cloud
         pcl::fromROSMsg(*laserCloudMsg, *laserCloud);
+        ros::Time timestamp = laserCloudMsg->header.stamp;
+        const float scanTimeSinceInitialization = (timestamp - initialTime_).toSec();
         // Register New Scan
-        updateElevationMap();
+        updateElevationMap(scanTimeSinceInitialization);
         // ROS_INFO_STREAM(observingList1.size());
         // publish local occupancy grid map
         publishMap();
     }
 
-    void updateElevationMap(){
+    void updateElevationMap(const float timestamp){
         int cloudSize = laserCloud->points.size();
         for (int i = 0; i < cloudSize; ++i){
             laserCloud->points[i].z -= 0.2; // for visualization
-            updateElevationMap(&laserCloud->points[i]);
+            updateElevationMap(&laserCloud->points[i], timestamp);
         }
     }
 
-    void updateElevationMap(PointType *point){
+    void updateElevationMap(PointType *point, const float timestamp){
         // Find point index in global map
         grid_t thisGrid;
         if (findPointGridInMap(&thisGrid, point) == false) return;
         // Get current cell pointer
         mapCell_t *thisCell = grid2Cell(&thisGrid);
         // update elevation
-        updateCellElevation(thisCell, point);
+        updateCellElevation(thisCell, point, timestamp);
         // update occupancy
-        updateCellOccupancy(thisCell, point);
+        // updateCellOccupancy(thisCell, point);
         // update observation time
         updateCellObservationTime(thisCell);
     }
@@ -174,7 +179,7 @@ public:
         thisCell->updateOccupancy(occupancy);
     }
     */
-    void updateCellElevation(mapCell_t *thisCell, PointType *point){
+    void updateCellElevation(mapCell_t *thisCell, PointType *point, const float timestamp){
         // Kalman Filter: update cell elevation using Kalman filter
         // https://www.cs.cornell.edu/courses/cs4758/2012sp/materials/MI63slides.pdf
 
@@ -184,7 +189,33 @@ public:
             thisCell->elevationVar = pointDistance(robotPoint, *point);
             return;
         }
+        // added by dyx @  6.26: adopt updating rules in ETH elevation mapping 
+        float height_p = point->z;
+        float elevation_pre = thisCell->elevation;
+        float elevationVar_pre = thisCell->elevationVar;
+        float dist_mahalanobis = fabs(elevation_pre - height_p) / sqrt(elevationVar_pre);
+        float elevation_thresh = 2.5;
+        if (dist_mahalanobis > elevation_thresh) {
+            if (timestamp - thisCell->time <= 1.0 && elevation_pre > height_p) {
+                ;
+            }
+            else if (timestamp - thisCell->time <= 1.0) {
+                thisCell->updateElevation(point->z, pointDistance(robotPoint, *point));
+            }
+            else {
+                thisCell->updateElevation(elevation_pre, elevationVar_pre + pow(0.003, 2));
+            }
+            
+        }
+        else {
+            float R = pointDistance(robotPoint, *point);
+            float elevation_final = (elevation_pre * R + height_p * elevationVar_pre) / (R + elevationVar_pre);
+            float elevationVar_final = R * elevationVar_pre / (R + elevationVar_pre);
+            thisCell->updateElevation(elevation_final, elevationVar_final);
+        }
 
+        /*
+        // previous kalman filter
         // Predict:
         float x_pred = thisCell->elevation; // x = F * x + B * u
         float P_pred = thisCell->elevationVar + 0.01; // P = F*P*F + Q
@@ -197,6 +228,7 @@ public:
         float P_final = (1 - K) * P_pred; // P_final = (I - K * H) * P_pred
         // Update cell
         thisCell->updateElevation(x_final, P_final);
+        */
     }
 
     mapCell_t* grid2Cell(grid_t *thisGrid){
@@ -318,7 +350,7 @@ public:
 
             if (slopeAngle > 30.0) {
                 thisPoint.intensity = 100;
-                updateCellOccupancy(thisCell, &thisPoint);
+                // updateCellOccupancy(thisCell, &thisPoint);
                 continue;
             }
             

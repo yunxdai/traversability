@@ -40,12 +40,13 @@ private:
     bool **obstFlag;
     bool **initFlag;
 
+    ros::Time pcMsgTimeStamp;
 
 public:
     TraversabilityFilter():
         nh("~"){
-        subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/full_cloud_info", 5, &TraversabilityFilter::cloudHandler, this);
-        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
+        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/full_cloud_info", 5, &TraversabilityFilter::cloudHandler, this);
+        subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
         // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_cloud_registered_output", 5, &TraversabilityFilter::cloudHandler, this);
         pubCloud = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud", 5);
         pubCloudVisualHiRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_high_res", 5);
@@ -123,17 +124,17 @@ public:
 
     void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
         
-        // velodyne2RangeCloud(laserCloudMsg);
+        velodyne2RangeCloud(laserCloudMsg);
         
-        // extractRawCloud();
+        extractRawCloud();
 
-        extractRawCloud(laserCloudMsg);
+        // extractRawCloud(laserCloudMsg);
 
         if (transformCloud() == false) return;
 
         cloud2Matrix();
 
-        applyFilter();
+        // applyFilter();
 
         extractFilteredCloud();
 
@@ -161,7 +162,8 @@ public:
                 ros::shutdown();
             }
         }
-
+        // save timestamp (for transform)
+        pcMsgTimeStamp = laserCloudMsg->header.stamp;
         size_t cloudSize = laserCloudRaw->points.size();
         // cout << "raw cloud size = " << cloudSize << endl;
         // PointType thisPoint;
@@ -236,7 +238,6 @@ public:
         // std::cout << intensity_mat << std::endl;
         // std::cout << "-----------------------" << std::endl;
         int nPoints = laserCloudIn->points.size();
-        // cout << "valid cloud size = " << nPoints << endl;
         // extract range info
         for (int i = 0; i < N_SCAN; ++i){
             for (int j = 0; j < Horizon_SCAN; ++j){
@@ -254,6 +255,7 @@ public:
     bool transformCloud(){
         // Listen to the TF transform and prepare for point cloud transformation
         try{listener.lookupTransform("map","base_link", ros::Time(0), transform); }
+        // try{listener.lookupTransform("map","base_link", pcMsgTimeStamp, transform); }
         catch (tf::TransformException ex){ /*ROS_ERROR("Transfrom Failure.");*/ return false; }
 
         robotPoint.x = transform.getOrigin().x();
@@ -437,8 +439,8 @@ public:
                 // save updated points
                 laserCloudOut->push_back(p);
                 // extract obstacle points and convert them to laser scan
-                if (p.intensity == 100)
-                    laserCloudObstacles->push_back(p);
+                // if (p.intensity == 100)
+                //     laserCloudObstacles->push_back(p);
             }
         }
 
@@ -447,6 +449,7 @@ public:
             sensor_msgs::PointCloud2 laserCloudTemp;
             pcl::toROSMsg(*laserCloudOut, laserCloudTemp);
             laserCloudTemp.header.stamp = ros::Time::now();
+            // laserCloudTemp.header.stamp = pcMsgTimeStamp;
             laserCloudTemp.header.frame_id = "map";
             pubCloudVisualHiRes.publish(laserCloudTemp);
         }
@@ -500,6 +503,7 @@ public:
                     obstFlag[i][j] = true;
                     thisPoint.intensity = 100; // obstacle
                     laserCloudTemp->push_back(thisPoint);
+                    laserCloudObstacles->push_back(thisPoint);
                 }else{
                     thisPoint.intensity = 0; // free
                     laserCloudTemp->push_back(thisPoint);
@@ -514,6 +518,7 @@ public:
             sensor_msgs::PointCloud2 laserCloudTemp;
             pcl::toROSMsg(*laserCloudOut, laserCloudTemp);
             laserCloudTemp.header.stamp = ros::Time::now();
+            // laserCloudTemp.header.stamp = pcMsgTimeStamp;
             laserCloudTemp.header.frame_id = "map";
             pubCloudVisualLowRes.publish(laserCloudTemp);
         }
@@ -624,6 +629,7 @@ public:
         sensor_msgs::PointCloud2 laserCloudTemp;
         pcl::toROSMsg(*laserCloudOut, laserCloudTemp);
         laserCloudTemp.header.stamp = ros::Time::now();
+        // laserCloudTemp.header.stamp = pcMsgTimeStamp;
         laserCloudTemp.header.frame_id = "map";
         pubCloud.publish(laserCloudTemp);
     }
@@ -633,6 +639,7 @@ public:
         updateLaserScan();
 
         laserScan.header.stamp = ros::Time::now();
+        // laserScan.header.stamp = pcMsgTimeStamp;
         pubLaserScan.publish(laserScan);
         // initialize laser scan for new scan
         std::fill(laserScan.ranges.begin(), laserScan.ranges.end(), laserScan.range_max + 1.0);
@@ -641,6 +648,8 @@ public:
     void updateLaserScan(){
 
         try{listener.lookupTransform("base_link","map", ros::Time(0), transform);}
+        // try{listener.lookupTransform("base_link","map", pcMsgTimeStamp, transform);}
+        
         catch (tf::TransformException ex){ /*ROS_ERROR("Transfrom Failure.");*/ return; }
 
         laserCloudObstacles->header.frame_id = "map";

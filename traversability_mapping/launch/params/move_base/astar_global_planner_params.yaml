@@ -1,6 +1,11 @@
 GlobalPlanner:
   old_navfn_behavior: false                     # Exactly mirror behavior of navfn, use defaults for other boolean parameters, default false
   use_quadratic: true                           # Use the quadratic approximation of the potential. Otherwise, use a simpler calculation, default true
-  use_dijkstra: false                           # Use dijkstra's algorithm. Otherwise, A*, default true
-  use_grid_path: false
+  use_dijkstra: false                        # Use dijkstra's algorithm. Otherwise, A*, default true
+  use_grid_path: true
   allow_unknown: true
+  lethal cost: 253
+  neutral cost: 66
+  cost_factor: 0.55
+  visualize_potential: false
+  publish_potential: true

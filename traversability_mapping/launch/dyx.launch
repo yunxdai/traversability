@@ -12,6 +12,6 @@
     <node pkg="traversability_mapping" type="traversability_path"    name="traversability_path"    output="screen"/> -->
 
     <!--- Run Move Base -->
-    <!-- <include file="$(find traversability_mapping)/launch/include/move_base.launch" /> -->
-
+    <include file="$(find traversability_mapping)/launch/include/move_base_Astar.launch" />
+    <node pkg="rviz" type="rviz" name="rviz" output="log" args="-d $(find traversability_mapping)/launch/include/traversability_mapping.rviz" />
 </launch>
