@@ -134,7 +134,7 @@ public:
 
         cloud2Matrix();
 
-        // applyFilter();
+        applyFilter();
 
         extractFilteredCloud();
 
@@ -193,7 +193,8 @@ public:
 
             if (columnIdn < 0 || columnIdn >= Horizon_SCAN) continue;
 
-            range = sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y + thisPoint.z);
+            range = sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y + thisPoint.z * thisPoint.z);
+            // range = sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y);
             if (range < sensorMinimumRange) continue;
             index = columnIdn + rowIdn * Horizon_SCAN;
             // laserCloudIn->points[index] = thisPoint;
@@ -233,10 +234,6 @@ public:
     void extractRawCloud(){
         // ROS msg -> PCL cloud
         // This function takes need call of function "velodyne2RangeCloud"
-        // Eigen::MatrixXf intensity_mat;
-        // cv::cv2eigen(intensityMatrix, intensity_mat);
-        // std::cout << intensity_mat << std::endl;
-        // std::cout << "-----------------------" << std::endl;
         int nPoints = laserCloudIn->points.size();
         // extract range info
         for (int i = 0; i < N_SCAN; ++i){
@@ -289,12 +286,13 @@ public:
             positiveCurbFilter();
             negativeCurbFilter();
         }
-
-        slopeFilter();
+        // negativeCurbFilter();
+        // slopeFilter();
         // intensityFilter();
     }
-
-    void positiveCurbFilter(){
+    /*
+    void positiveCurbFilter() // positive curb filter基本没用，有巨大问题
+    {
         int rangeCompareNeighborNum = 3;
         float diff[Horizon_SCAN - 1];
 
@@ -304,38 +302,90 @@ public:
                 diff[j] = rangeMatrix.at<float>(i, j) - rangeMatrix.at<float>(i, j+1); // 同一个ring上相邻点的range difference
 
             for (int j = rangeCompareNeighborNum; j < Horizon_SCAN - rangeCompareNeighborNum; ++j){
-
                 // Point that has been verified by other filters
-                if (obstacleMatrix.at<int>(i, j) == 1)
+                if (obstacleMatrix.at<int>(i, j) == 1) {
                     continue;
-
+                }
                 bool breakFlag = false;
                 // point is too far away, skip comparison since it can be inaccurate
-                if (rangeMatrix.at<float>(i, j) > sensorRangeLimit)
+                if (rangeMatrix.at<float>(i, j) > sensorRangeLimit) {
                     continue;
+                }
                 // make sure all points have valid range info
-                for (int k = -rangeCompareNeighborNum; k <= rangeCompareNeighborNum; ++k)
+                for (int k = -rangeCompareNeighborNum; k <= rangeCompareNeighborNum; ++k) {
                     if (rangeMatrix.at<float>(i, j+k) == -1){
                         breakFlag = true;
                         break;
                     }
-                if (breakFlag == true) continue;
+                }
+                if (breakFlag == true) { continue; }
                 // range difference should be monotonically increasing or decresing
                 for (int k = -rangeCompareNeighborNum; k < rangeCompareNeighborNum-1; ++k)
                     if (diff[j+k] * diff[j+k+1] <= 0){
                         breakFlag = true;
                         break;
                     }
-                if (breakFlag == true) continue;
+                if (breakFlag == true) { continue; }
                 // the range difference between the start and end point of neighbor points is smaller than a threashold, then continue
-                if (abs(rangeMatrix.at<float>(i, j-rangeCompareNeighborNum) - rangeMatrix.at<float>(i, j+rangeCompareNeighborNum)) /rangeMatrix.at<float>(i, j) < 0.03)
+                if (fabs(rangeMatrix.at<float>(i, j-rangeCompareNeighborNum) - rangeMatrix.at<float>(i, j+rangeCompareNeighborNum)) /rangeMatrix.at<float>(i, j) < 0.01) {
                     continue;
-                // if "continue" is not used at this point, it is very likely to be an obstacle point
+                }
                 obstacleMatrix.at<int>(i, j) = 1;
             }
         }
     }
+    */
+    void positiveCurbFilter() // positive curb 有用了但是噪声不少
+    {
+        int rangeCompareNeighborNum = 4;
+        float diff[Horizon_SCAN - 1];
 
+        for (int i = 0; i < scanNumCurbFilter; ++i){
+
+            for (int j = rangeCompareNeighborNum; j < Horizon_SCAN - rangeCompareNeighborNum; ++j){
+                // Point that has been verified by other filters
+                if (obstacleMatrix.at<int>(i, j) == 1) {
+                    continue;
+                }
+                bool breakFlag = false;
+                // point is too far away, skip comparison since it can be inaccurate
+                if (rangeMatrix.at<float>(i, j) > sensorRangeLimit || rangeMatrix.at<float>(i,j) == -1) {
+                    continue;
+                }
+                vector<float> neighborArray; // valid neighboring points (in order)
+                for (int k = -rangeCompareNeighborNum; k <= rangeCompareNeighborNum; k++) {
+                    if (rangeMatrix.at<float>(i,j+k) != -1) {
+                        neighborArray.push_back(rangeMatrix.at<float>(i,j+k));
+                    }
+                }
+
+                float minR = *std::min_element(neighborArray.begin(),neighborArray.end());
+                float maxR = *std::max_element(neighborArray.begin(),neighborArray.end());
+                float max_diff = maxR - minR;
+                // check monotonic
+                if (!isMonotonic(neighborArray)) continue;
+                if (max_diff / rangeMatrix.at<float>(i, j) < 0.02) {
+                    continue;
+                }
+                obstacleMatrix.at<int>(i, j) = 1;
+            }
+        }
+    }
+    
+    bool isMonotonic(vector<float>& num) {
+        return checkMonotonic(num, true) || checkMonotonic(num, false);
+    }
+    bool checkMonotonic(vector<float>& num, bool flag) {
+        for (int i = 0; i < num.size() - 1; i++) {
+            if (flag) {
+                if (num[i] > num[i+1]) return false;
+            }
+            else {
+                if (num[i] < num[i+1]) return false;
+            }
+        }
+        return true;
+    }
     void negativeCurbFilter(){
         int rangeCompareNeighborNum = 3;
 
@@ -360,7 +410,7 @@ public:
                     // height diff greater than threshold, might be a negative curb
 
                     // if里的第一个条件要不要abs?
-                    if (laserCloudMatrix[i][j].z - laserCloudMatrix[i][k].z > 0.1 
+                    if (fabs(laserCloudMatrix[i][j].z - laserCloudMatrix[i][k].z) > 0.1
                         && pointDistance(laserCloudMatrix[i][j], laserCloudMatrix[i][k]) <= 1.0){
                         obstacleMatrix.at<int>(i, j) = 1; 
                         break;
@@ -439,8 +489,8 @@ public:
                 // save updated points
                 laserCloudOut->push_back(p);
                 // extract obstacle points and convert them to laser scan
-                // if (p.intensity == 100)
-                //     laserCloudObstacles->push_back(p);
+                if (p.intensity == 100)
+                    laserCloudObstacles->push_back(p);
             }
         }
 
@@ -462,20 +512,24 @@ public:
         // height map origin
         localMapOrigin.x = roundedX - sensorRangeLimit;
         localMapOrigin.y = roundedY - sensorRangeLimit;
-        
+        unordered_map<int, vector<float>> heightmap;
+        int helper = filterHeightMapArrayLength + 1;
         // convert from point cloud to height map
         int cloudSize = laserCloudOut->points.size();
         for (int i = 0; i < cloudSize; ++i){
 
             int idx = (laserCloudOut->points[i].x - localMapOrigin.x) / mapResolution;
             int idy = (laserCloudOut->points[i].y - localMapOrigin.y) / mapResolution;
+            
+            int linear_idx = idx * helper + idy; // easy from linear_idx to idx / idy
             // points out of boundry
             if (idx < 0 || idy < 0 || idx >= filterHeightMapArrayLength || idy >= filterHeightMapArrayLength)
                 continue;
             // obstacle point (decided by curb or slope filter)
             if (laserCloudOut->points[i].intensity == 100)
                 obstFlag[idx][idy] = true;
-            // save min and max height of a grid
+
+            heightmap[linear_idx].push_back(laserCloudOut->points[i].z);
             if (initFlag[idx][idy] == false){
                 minHeight[idx][idy] = laserCloudOut->points[i].z;
                 maxHeight[idx][idy] = laserCloudOut->points[i].z;
@@ -485,7 +539,27 @@ public:
                 maxHeight[idx][idy] = std::max(maxHeight[idx][idy], laserCloudOut->points[i].z);
             }
         }
-        // intermediate cloud
+        float vehicleHeight = 1.0;
+        /*
+        // process hanging over structure
+        for (auto it = heightmap.begin(); it != heightmap.end(); it++) {
+            int idx = it->first / helper;
+            int idy = it->first % helper;
+            auto& heightPoint = it->second;
+            cout << "DEBUGGING EXAMPLE: height point size at (" << idx << "," << idy << ") is " << heightPoint.size() << endl; 
+            sort(heightPoint.begin(),heightPoint.end());
+            float lowestHeight = 0;
+            for (int i = 0; i < heightPoint.size() - 1; i++) {
+                if (i == 0) lowestHeight = heightPoint[i];
+                else {
+                    if (heightPoint[i+1] - heightPoint[i] > vehicleHeight && heightPoint[i] - lowestHeight < traversableHeight) {
+                        obstFlag[idx][idy] = true; // 应该是标记成clear的，此处仅供测试用
+                    }
+                }
+            }
+        }
+        */
+        // intermediate cloud (adding process for hanging over structure)
         pcl::PointCloud<PointType>::Ptr laserCloudTemp(new pcl::PointCloud<PointType>());
         // convert from height map to point cloud
         for (int i = 0; i < filterHeightMapArrayLength; ++i){
@@ -497,21 +571,44 @@ public:
                 PointType thisPoint;
                 thisPoint.x = localMapOrigin.x + i * mapResolution + mapResolution / 2.0;
                 thisPoint.y = localMapOrigin.y + j * mapResolution + mapResolution / 2.0;
-                thisPoint.z = maxHeight[i][j];
+                thisPoint.z = maxHeight[i][j]; // downsample时只记录最大
 
-                if (obstFlag[i][j] == true || maxHeight[i][j] - minHeight[i][j] > filterHeightLimit){
+                // if (obstFlag[i][j] == true || maxHeight[i][j] - minHeight[i][j] > filterHeightLimit)
+                if (maxHeight[i][j] - minHeight[i][j] > filterHeightLimit) {
                     obstFlag[i][j] = true;
+                    int linear_idx = i * helper + j;
+                    if (heightmap.find(linear_idx) != heightmap.end()) {
+                        // multiply height value exist
+                        auto& heightVec = heightmap[linear_idx];
+                        // cout << "DEBUGGING EXAMPLE: height point size at (" << i << "," << j << ") is " << heightVec.size() << endl; 
+                        sort(heightVec.begin(),heightVec.end());
+                        float lowestHeight = 0;
+                        for (int k = 0; k < heightVec.size() - 1; k++) {
+                            if (k == 0) lowestHeight = heightVec[k];
+                            else {
+                                if (heightVec[k+1] - heightVec[k] > vehicleHeight && heightVec[k] - lowestHeight < filterHeightLimit) {
+                                    // cout << "Hanging over at (" << i << "," << j << ")" << endl;
+                                    obstFlag[i][j] = false; // 若存在hanging over，则重新置为false
+                                }
+                            }
+                        }
+                    }
+                }
+                if (obstFlag[i][j] == true)
+                {
+                    // obstFlag[i][j] = true;
                     thisPoint.intensity = 100; // obstacle
                     laserCloudTemp->push_back(thisPoint);
-                    laserCloudObstacles->push_back(thisPoint);
+                    // laserCloudObstacles->push_back(thisPoint);
                 }else{
                     thisPoint.intensity = 0; // free
                     laserCloudTemp->push_back(thisPoint);
+                    // 如果分成两个point cloud发送呢？
                 }
             }
         }
 
-        *laserCloudOut = *laserCloudTemp;
+        *laserCloudOut = *laserCloudTemp; // 只有前8线的
 
         // Publish laserCloudOut for visualization (after downsample but beforeBGK prediction)
         if (pubCloudVisualLowRes.getNumSubscribers() != 0){
@@ -541,7 +638,7 @@ public:
                 testPoint.y = localMapOrigin.y + j * mapResolution + mapResolution / 2.0;
                 testPoint.z = robotPoint.z; // this value is not used except for computing distance with robotPoint
                 // skip grids too far
-                if (pointDistance(testPoint, robotPoint) > sensorRangeLimit)
+                if (pointDistance(testPoint, robotPoint) > sensorRangeLimit) // 所以这里算的其实是水平距离
                     continue;
                 // Training data
                 vector<float> xTrainVec; // training data x and y coordinates

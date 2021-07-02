@@ -4,7 +4,7 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Twist Command1
+        - /Filtered Cloud Visual1
         - /PRM Path1/Namespaces1
       Splitter Ratio: 0.5888888835906982
     Tree Height: 790
@@ -151,7 +151,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 0
       Max Intensity: 100
@@ -161,14 +161,14 @@ Visualization Manager:
       Position Transformer: XYZ
       Queue Size: 10
       Selectable: true
-      Size (Pixels): 8
+      Size (Pixels): 5
       Size (m): 0.10000000149011612
       Style: Points
-      Topic: /filtered_pointcloud_visual_low_res
+      Topic: /filtered_pointcloud_visual_high_res
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
-      Value: false
+      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: false
       Autocompute Value Bounds:
@@ -181,7 +181,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 0; 0
       Max Intensity: 100
@@ -198,7 +198,7 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
-      Value: true
+      Value: false
     - Alpha: 0.800000011920929
       Class: rviz/Map
       Color Scheme: map
@@ -447,7 +447,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 45.619380950927734
+      Distance: 10.24856185913086
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -462,10 +462,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.2947965860366821
+      Pitch: 1.5697963237762451
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 2.825404167175293
+      Yaw: 4.365410327911377
     Saved: ~
 Window Geometry:
   Displays:

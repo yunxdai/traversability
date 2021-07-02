@@ -41,6 +41,7 @@
 #include <pcl_ros/transforms.h>
 
 #include <vector>
+#include <unordered_map>
 #include <cmath>
 #include <algorithm>
 #include <queue>
@@ -90,7 +91,7 @@ typedef struct kdres kdres_t;
 extern const bool useCloudRing = true;
 
 // Environment
-extern const bool urbanMapping = false;
+extern const bool urbanMapping = true;
 
 // VLP-16
 extern const int N_SCAN = 16;
@@ -109,21 +110,23 @@ extern const int mapArrayLength = 2000 / mapCubeLength; // the sub-map dimension
 extern const int rootCubeIndex = mapArrayLength / 2; // by default, robot is at the center of global map at the beginning
 
 // Filter Ring Params
-extern const int scanNumCurbFilter = 10;
+extern const int scanNumCurbFilter = 8;
 extern const int scanNumSlopeFilter = 8;
 extern const int scanNumMax = std::max(scanNumCurbFilter, scanNumSlopeFilter);
+// extern const int scanNumMax = 16;
+
 
 // Filter Threshold Params
-// extern const float sensorRangeLimit = 12; // only keep points with in ...
+// extern const float sensorRangeLimit = 12; // only keep points with in ... meters
 extern const float sensorRangeLimit = 12;   
-// extern const float filterHeightLimit = (urbanMapping == true) ? 0.1 : 0.15; // step diff threshold
-extern const float filterHeightLimit = (urbanMapping == true) ? 0.05 : 0.15; // step diff threshold         
+extern const float filterHeightLimit = (urbanMapping == true) ? 0.1 : 0.15; // step diff threshold
+// extern const float filterHeightLimit = (urbanMapping == true) ? 0.05 : 0.15; // step diff threshold         
 extern const float filterAngleLimit = 20; // slope angle threshold          
-extern const int filterHeightMapArrayLength = sensorRangeLimit*2 / mapResolution;
+extern const int filterHeightMapArrayLength = sensorRangeLimit * 2 / mapResolution;
 extern const float intensityLimit = 10.0;
 // BGK Prediction Params
-extern const bool predictionEnableFlag = false;
-extern const float predictionKernalSize = 0.2; // predict elevation within x meters
+extern const bool predictionEnableFlag = true;
+extern const float predictionKernalSize = 0.1; // predict elevation within x meters
 
 // Occupancy Params
 extern const float p_occupied_when_laser = 0.9;
@@ -140,7 +143,7 @@ extern const float visualizationRadius = 50;
 extern const float visualizationFrequency = 2; // n, skip n scans then publish, n=0, visualize at each scan
 
 // Robot Params
-extern const float robotRadius = 0.4;
+extern const float robotRadius = 0.2;
 // extern const float sensorHeight = 0.5;
 extern const float sensorHeight = 0.87;
 

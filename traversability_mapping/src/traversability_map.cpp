@@ -51,9 +51,9 @@ public:
         pubCount(1),
         mapArrayCount(0){
         // subscribe to traversability filter
-        // subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud", 5, &TraversabilityMapping::cloudHandler, this);
+        subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud", 5, &TraversabilityMapping::cloudHandler, this);
         // subscribe directly to raw pointcloud (for elevation mapping test)
-        subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud_visual_high_res", 5, &TraversabilityMapping::cloudHandler, this);
+        // subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud_visual_high_res", 5, &TraversabilityMapping::cloudHandler, this);
         // publish local occupancy and elevation grid map
         pubOccupancyMapLocal = nh.advertise<nav_msgs::OccupancyGrid> ("/occupancy_map_local", 5);
         pubOccupancyMapLocalHeight = nh.advertise<elevation_msgs::OccupancyElevation> ("/occupancy_map_local_height", 5);
@@ -136,7 +136,7 @@ public:
         // update elevation
         updateCellElevation(thisCell, point, timestamp);
         // update occupancy
-        // updateCellOccupancy(thisCell, point);
+        updateCellOccupancy(thisCell, point); // 待改进：occupancy信息也需要考虑方差（或者距离），太远的会有很多误检（大部分远的curb都会）
         // update observation time
         updateCellObservationTime(thisCell);
     }
@@ -148,7 +148,9 @@ public:
             observingList1.push_back(thisCell);
     }
     
-    void updateCellOccupancy(mapCell_t *thisCell, PointType *point){
+    void updateCellOccupancy(mapCell_t *thisCell, PointType *point)
+    // 这个updating函数可能也有问题
+    {
         // Update log_odds
         float p;  // Probability of being occupied knowing current measurement.
         if (point->intensity == 100)
@@ -189,6 +191,7 @@ public:
             thisCell->elevationVar = pointDistance(robotPoint, *point);
             return;
         }
+         
         // added by dyx @  6.26: adopt updating rules in ETH elevation mapping 
         float height_p = point->z;
         float elevation_pre = thisCell->elevation;
@@ -213,7 +216,7 @@ public:
             float elevationVar_final = R * elevationVar_pre / (R + elevationVar_pre);
             thisCell->updateElevation(elevation_final, elevationVar_final);
         }
-
+        
         /*
         // previous kalman filter
         // Predict:
@@ -339,6 +342,7 @@ public:
                 continue;
             }
             */
+            
 
             
             // slope
@@ -348,7 +352,7 @@ public:
             cv::eigen(matCov, matEig, matVec); // find eigenvalues and eigenvectors for the covariance matrix
             float slopeAngle = std::acos(std::abs(matVec.at<float>(2, 2))) / M_PI * 180;
 
-            if (slopeAngle > 30.0) {
+            if (slopeAngle > filterAngleLimit) {
                 thisPoint.intensity = 100;
                 // updateCellOccupancy(thisCell, &thisPoint);
                 continue;
