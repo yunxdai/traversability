@@ -154,7 +154,7 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 0
-      Max Intensity: 100
+      Max Intensity: 0
       Min Color: 85; 170; 255
       Min Intensity: 0
       Name: Filtered Cloud Visual
@@ -181,7 +181,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: Intensity
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 0; 0
       Max Intensity: 100
@@ -198,17 +198,17 @@ Visualization Manager:
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: false
-      Value: false
+      Value: true
     - Alpha: 0.800000011920929
       Class: rviz/Map
       Color Scheme: map
       Draw Behind: false
-      Enabled: false
+      Enabled: true
       Name: Occup Map
       Topic: /occupancy_map_local
       Unreliable: false
       Use Timestamp: false
-      Value: false
+      Value: true
     - Alpha: 0.699999988079071
       Class: rviz/Map
       Color Scheme: costmap
@@ -447,7 +447,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 10.24856185913086
+      Distance: 29.603748321533203
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -462,10 +462,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 0.5247973203659058
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 4.365410327911377
+      Yaw: 3.1803882122039795
     Saved: ~
 Window Geometry:
   Displays:

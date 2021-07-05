@@ -1,0 +1,3 @@
+int64 flag
+---
+nav_msgs/OccupancyGrid occupancy

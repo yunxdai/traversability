@@ -88,10 +88,10 @@ typedef struct kdtree kdtree_t;
 typedef struct kdres kdres_t;
 
 // Point Cloud Type
-extern const bool useCloudRing = true;
+extern const bool useCloudRing = false;
 
 // Environment
-extern const bool urbanMapping = true;
+extern const bool urbanMapping = false;
 
 // VLP-16
 extern const int N_SCAN = 16;
@@ -135,13 +135,13 @@ extern const float large_log_odds = 100;
 extern const float max_log_odds_for_belief = 20;
 
 // 2D Map Publish Params
-extern const int localMapLength = 200; // length of the local occupancy grid map (meter)
+extern const int localMapLength = 20; // length of the local occupancy grid map (meter)
 extern const int localMapArrayLength = localMapLength / mapResolution;
 
 // Visualization Params
 extern const float visualizationRadius = 50;
-extern const float visualizationFrequency = 2; // n, skip n scans then publish, n=0, visualize at each scan
-
+// extern const float visualizationFrequency = 2; // n, skip n scans then publish, n=0, visualize at each scan
+extern const float visualizationFrequency = 0; // n, skip n scans then publish, n=0, visualize at each scan
 // Robot Params
 extern const float robotRadius = 0.2;
 // extern const float sensorHeight = 0.5;
@@ -151,7 +151,7 @@ extern const float sensorHeight = 0.87;
 // extern const int traversabilityObserveTimeTh = 10;
 // extern const float traversabilityCalculatingDistance = 8.0;
 extern const int traversabilityObserveTimeTh = 2;
-extern const float traversabilityCalculatingDistance = 5.0;
+extern const float traversabilityCalculatingDistance = 20.0;
 // Planning Cost Params
 extern const int NUM_COSTS = 3;
 extern const int tmp[] = {2};
@@ -203,6 +203,10 @@ struct mapCell_t{
     
     float occupancy, occupancyVar;
     float elevation, elevationVar;
+    float step_diff;
+    float step_traversability;
+    float slope_traversability;
+    float roughness_traversability;
     mapCell_t(){
         
         log_odds = 0.5;

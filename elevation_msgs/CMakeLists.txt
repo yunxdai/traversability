@@ -20,10 +20,11 @@ add_message_files(
   OccupancyElevation.msg
 )
 
-#add_service_files(
-#  DIRECTORY srv
-#  FILES
-#  empty.srv)
+add_service_files(
+  DIRECTORY srv
+  FILES
+  occupancyLocal.srv
+)
 
 
 
