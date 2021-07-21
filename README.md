@@ -37,6 +37,16 @@ roslaunch traversability_mapping dyx.launch
 ```
 and set ```use_sim_time``` as ```false```
 
+## Run with Navigation
+Update: we finish the navigation pipeline using default Astar global planner and DWA local planner, based on the traversability occupancy grid map. The pipeline can run in the gazebo simulation environment.
+1. start a custom simulation environment in gazebo
+'''
+$ roslaunch cpr_agriculture_gazebo agriculture_world.launch
+'''
+2. run the lego_loam & traversability mapping (lego_loam provides the localization information)
+'''
+roslaunch traversability_mapping dyx_simulation.launch
+'''
 <!-- ## Cite *Traversability_Mapping*
 
 Thank you for citing our paper if you use any of this code: 
