@@ -47,16 +47,16 @@ private:
     ros::Time initialTime_;
     
     // Service
-    ros::ServiceServer service;
+    // ros::ServiceServer service;
 public:
     TraversabilityMapping():
         nh("~"),
         pubCount(1),
         mapArrayCount(0){
         // subscribe to traversability filter
-        // subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud", 5, &TraversabilityMapping::cloudHandler, this);
+        subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud", 5, &TraversabilityMapping::cloudHandler, this);
         // subscribe directly to raw pointcloud (for elevation mapping test)
-        subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud_visual_high_res", 5, &TraversabilityMapping::cloudHandler, this);
+        // subFilteredGroundCloud = nh.subscribe<sensor_msgs::PointCloud2>("/filtered_pointcloud_visual_high_res", 5, &TraversabilityMapping::cloudHandler, this);
         // publish local occupancy and elevation grid map
         pubOccupancyMapLocal = nh.advertise<nav_msgs::OccupancyGrid> ("/occupancy_map_local", 5);
         pubOccupancyMapLocalHeight = nh.advertise<elevation_msgs::OccupancyElevation> ("/occupancy_map_local_height", 5);
@@ -64,12 +64,12 @@ public:
         pubElevationCloud = nh.advertise<sensor_msgs::PointCloud2> ("/elevation_pointcloud", 5);
         initialTime_ = ros::Time::now();    
         // Service
-        service = nh.advertiseService("/test", &TraversabilityMapping::serviceCallback, this);
+        // service = nh.advertiseService("/test", &TraversabilityMapping::serviceCallback, this);
         allocateMemory(); 
     }
 
     ~TraversabilityMapping(){}
-
+    /*
     bool serviceCallback(elevation_msgs::occupancyLocal::Request &req, elevation_msgs::occupancyLocal::Response &res) {
         // do traversability computation
         // res.occupancy = occupancyMap2DHeight.occupancy;
@@ -256,7 +256,7 @@ public:
         
         return true;
     }
-
+    */
     void allocateMemory(){
         // allocate memory for point cloud
         laserCloud.reset(new pcl::PointCloud<PointType>());
@@ -380,7 +380,7 @@ public:
             thisCell->elevationVar = pointDistance(robotPoint, *point);
             return;
         }
-         
+        /*
         // added by dyx @  6.26: adopt updating rules in ETH elevation mapping 
         float height_p = point->z;
         float elevation_pre = thisCell->elevation;
@@ -405,8 +405,8 @@ public:
             float elevationVar_final = R * elevationVar_pre / (R + elevationVar_pre);
             thisCell->updateElevation(elevation_final, elevationVar_final);
         }
-        
-        /*
+        */
+
         // previous kalman filter
         // Predict:
         float x_pred = thisCell->elevation; // x = F * x + B * u
@@ -420,7 +420,6 @@ public:
         float P_final = (1 - K) * P_pred; // P_final = (I - K * H) * P_pred
         // Update cell
         thisCell->updateElevation(x_final, P_final);
-        */
     }
 
     mapCell_t* grid2Cell(grid_t *thisGrid){
@@ -471,7 +470,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     ///////////////////////////////////// Traversability Calculation ///////////////////////////////////////////////
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    /*
+    
     void TraversabilityThread(){
 
         ros::Rate rate(10); // Hz
@@ -483,9 +482,9 @@ public:
             // rate.sleep();
         }
     }
-    */
+    
 
-    /*
+    
     void traversabilityMapCalculation(){
 
         // no new scan, return
@@ -494,8 +493,7 @@ public:
             return;
         }
         // ROS_INFO_STREAM("Traversability Calculating!");
-        // 只对new scan采用grid level的计算，对已经观测到的部分只根据filter的结果进行更新
-
+        //对于每一帧观测到的点云，检查是否在过往被多次观测到，若是则计算traversability（问题在于内圈的点可能没有被观测到但是周围的elevation信息发生了改变会导致其traversability改变？）
         observingList2 = observingList1;
         observingList1.clear();
 
@@ -521,17 +519,17 @@ public:
             // matPoints: n * 3 matrix
             Eigen::MatrixXf matPoints = Eigen::Map<const Eigen::Matrix<float, -1, -1, Eigen::RowMajor>>(xyzVector.data(), xyzVector.size() / 3, 3);
             
-            
             // min and max elevation
-            float minElevation = matPoints.col(2).minCoeff();
-            float maxElevation = matPoints.col(2).maxCoeff();
-            float maxDifference = maxElevation - minElevation;
-
-            if (maxDifference > filterHeightLimit){
-                thisPoint.intensity = 100;
-                updateCellOccupancy(thisCell, &thisPoint);
-                continue;
-            }
+            // float minElevation = matPoints.col(2).minCoeff();
+            // float maxElevation = matPoints.col(2).maxCoeff();
+            // float maxDifference = maxElevation - minElevation;
+            
+            // if (maxDifference > filterHeightLimit){
+            //     thisPoint.intensity = 100;
+            //     updateCellOccupancy(thisCell, &thisPoint);
+            //     continue;
+            // }
+            
             
             
 
@@ -542,16 +540,25 @@ public:
             cv::eigen2cv(cov, matCov); // copy data from eigen to cv::Mat
             cv::eigen(matCov, matEig, matVec); // find eigenvalues and eigenvectors for the covariance matrix
             float slopeAngle = std::acos(std::abs(matVec.at<float>(2, 2))) / M_PI * 180;
-
+            
             if (slopeAngle > filterAngleLimit) {
                 thisPoint.intensity = 100;
                 // updateCellOccupancy(thisCell, &thisPoint);
                 continue;
             }
+            /*
+            else {
+                if (thisPoint.intensity = 100) {
+                    thisPoint.intensity = 0;
+                }
+            }
+            */
+            
+            // updateCellOccupancy(thisCell,&thisPoint);
             
             
 
-            
+            /*
             // roughness
             Eigen::Vector3f norm(matVec.at<float>(2,0),matVec.at<float>(2,1),matVec.at<float>(2,2)); // normal vector
             Eigen::Vector3f mean = matPoints.colwise().mean();
@@ -560,10 +567,15 @@ public:
             res.array() -= planeParam;
             double roughness = sqrt(res.squaredNorm() / (xyzVector.size() - 1));
             double roughnessThresh_ = 0.01;
+
+            updateCellOccupancy(thisCell, &thisPoint);
+            
             if (roughness > roughnessThresh_) {
                 thisPoint.intensity = 100;
                 updateCellOccupancy(thisCell, &thisPoint);    
             }
+            */
+            
             
 
             // Debug
@@ -587,9 +599,9 @@ public:
             // }
         }
     }
-    */
+    
 
-    /*
+    
     vector<float> findNeighborElevations(mapCell_t *centerCell){
 
         vector<float> xyzVector;
@@ -631,8 +643,8 @@ public:
 
         return xyzVector;
     }
-    */
-
+    
+    /*
     vector<mapCell_t*> findNeighborElevations(mapCell_t *centerCell){
         // new version of find neighbor function (return cell_t rather than x,y,z)
         vector<mapCell_t*> mapCellVector;
@@ -672,7 +684,7 @@ public:
 
         return mapCellVector;
     }
-
+    */
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////// Occupancy Map (local) //////////////////////////////////////////////////
@@ -683,12 +695,12 @@ public:
         pubCount++;
         if (pubCount > visualizationFrequency){
             pubCount = 1;
-            // publishLocalMap();
+            publishLocalMap();
             publishTraversabilityMap();
         }
     }
 
-    /*
+    
     void publishLocalMap(){
 
         if (pubOccupancyMapLocal.getNumSubscribers() == 0 &&
@@ -755,9 +767,9 @@ public:
         }
 
         pubOccupancyMapLocalHeight.publish(occupancyMap2DHeight);
-        // pubOccupancyMapLocal.publish(occupancyMap2DHeight.occupancy);
+        pubOccupancyMapLocal.publish(occupancyMap2DHeight.occupancy);
     }
-    */
+    
     
 
     void initializeLocalOccupancyMap(){
@@ -836,16 +848,16 @@ int main(int argc, char** argv){
     
     TraversabilityMapping tMapping;
 
-    // std::thread predictionThread(&TraversabilityMapping::TraversabilityThread, &tMapping);
+    std::thread predictionThread(&TraversabilityMapping::TraversabilityThread, &tMapping);
 
     ROS_INFO("\033[1;32m---->\033[0m Traversability Mapping Started.");
     ROS_INFO("\033[1;32m---->\033[0m Traversability Mapping Scenario: %s.", 
         urbanMapping == true ? "\033[1;31mUrban\033[0m" : "\033[1;31mTerrain\033[0m");
 
-    ros::AsyncSpinner asyncSpinner(2);
-    asyncSpinner.start();
-    ros::waitForShutdown();
-    // ros::spin();
+    // ros::AsyncSpinner asyncSpinner(2);
+    // asyncSpinner.start();
+    // ros::waitForShutdown();
+    ros::spin();
 
     return 0;
 }

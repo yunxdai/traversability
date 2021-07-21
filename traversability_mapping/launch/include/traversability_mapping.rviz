@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Filtered Cloud Visual1
         - /PRM Path1/Namespaces1
+        - /Path1
       Splitter Ratio: 0.5888888835906982
     Tree Height: 790
   - Class: rviz/Selection
@@ -154,7 +155,7 @@ Visualization Manager:
       Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 0
-      Max Intensity: 0
+      Max Intensity: 100
       Min Color: 85; 170; 255
       Min Intensity: 0
       Name: Filtered Cloud Visual
@@ -203,12 +204,12 @@ Visualization Manager:
       Class: rviz/Map
       Color Scheme: map
       Draw Behind: false
-      Enabled: true
+      Enabled: false
       Name: Occup Map
       Topic: /occupancy_map_local
       Unreliable: false
       Use Timestamp: false
-      Value: true
+      Value: false
     - Alpha: 0.699999988079071
       Class: rviz/Map
       Color Scheme: costmap
@@ -426,6 +427,29 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
+    - Alpha: 1
+      Buffer Length: 1
+      Class: rviz/Path
+      Color: 78; 154; 6
+      Enabled: true
+      Head Diameter: 0.30000001192092896
+      Head Length: 0.20000000298023224
+      Length: 0.30000001192092896
+      Line Style: Billboards
+      Line Width: 0.20000000298023224
+      Name: Path
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Pose Color: 255; 85; 255
+      Pose Style: None
+      Radius: 0.029999999329447746
+      Shaft Diameter: 0.10000000149011612
+      Shaft Length: 0.10000000149011612
+      Topic: /base_link/trajectory
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 0; 0; 0
@@ -447,25 +471,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 29.603748321533203
+      Distance: 100.8674087524414
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: -19.12793731689453
+        Y: 0.3638473451137543
+        Z: -8.648119926452637
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5247973203659058
+      Pitch: 1.544796347618103
       Target Frame: base_link
       Value: Orbit (rviz)
-      Yaw: 3.1803882122039795
+      Yaw: 4.734170913696289
     Saved: ~
 Window Geometry:
   Displays:

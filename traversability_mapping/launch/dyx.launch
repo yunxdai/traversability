@@ -8,11 +8,17 @@
     <!--- Run Traversability Mapping -->    
     <node pkg="traversability_mapping" type="traversability_filter"  name="traversability_filter"  output="screen"/>
     <node pkg="traversability_mapping" type="traversability_map"     name="traversability_map"     output="screen"/>
-    <node pkg="traversability_mapping" type="service_test"     name="service_test"     output="screen"/>
+    <!-- <node pkg="traversability_mapping" type="service_test"     name="service_test"     output="screen"/> -->
     <!-- <node pkg="traversability_mapping" type="traversability_prm"     name="traversability_prm"     output="screen"/>
     <node pkg="traversability_mapping" type="traversability_path"    name="traversability_path"    output="screen"/> -->
 
     <!--- Run Move Base -->
     <!-- <include file="$(find traversability_mapping)/launch/include/move_base_Astar.launch" /> -->
+    <node pkg="hector_trajectory_server" type="hector_trajectory_server" name="trajectory_server_loam" ns="base_link" >
+        <param name="/target_frame_name" value="map" />
+        <param name="/source_frame_name" value="base_link" />
+        <param name="/trajectory_update_rate" value="10.0" />
+        <param name="/trajectory_publish_rate" value="10.0" />
+    </node>
     <node pkg="rviz" type="rviz" name="rviz" output="log" args="-d $(find traversability_mapping)/launch/include/traversability_mapping.rviz" />
 </launch>

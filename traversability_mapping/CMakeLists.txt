@@ -18,6 +18,9 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   nav_msgs
   elevation_msgs
+  #move base action
+  move_base_msgs
+  actionlib
   # visualization
   interactive_markers
   # planner plugin
@@ -71,6 +74,14 @@ target_link_libraries(traversability_filter ${catkin_LIBRARIES} ${PCL_LIBRARIES}
 add_executable(traversability_map src/traversability_map.cpp)
 add_dependencies(traversability_map ${catkin_EXPORTED_TARGETS} elevation_msgs_gencpp)
 target_link_libraries(traversability_map ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES})
+
+# Edge Detection on Occupancy Grid
+add_executable(boundary_detection src/edge_on_grid.cpp)
+target_link_libraries(boundary_detection ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+# Pointcloud Intensity Calibration
+# add_executable(intensity_calibration src/intensity_calibration.cpp)
+# target_link_libraries(intensity_calibration ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 # # PRM Planner
 # add_executable(traversability_prm 	src/traversability_prm.cpp src/library/kdtree.c)

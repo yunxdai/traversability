@@ -1,5 +1,5 @@
 #include "utility.h"
-
+#include <pcl/features/normal_3d.h>
 class TraversabilityFilter{
     
 private:
@@ -46,8 +46,8 @@ public:
     TraversabilityFilter():
         nh("~"){
         // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/full_cloud_info", 5, &TraversabilityFilter::cloudHandler, this);
-        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
-        subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_cloud_registered_output", 5, &TraversabilityFilter::cloudHandler, this);
+        subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
+        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_cloud_registered_output", 5, &TraversabilityFilter::cloudHandler, this);
         pubCloud = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud", 5);
         pubCloudVisualHiRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_high_res", 5);
         pubCloudVisualLowRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_low_res", 5);
@@ -128,8 +128,6 @@ public:
         
         extractRawCloud();
 
-        // extractRawCloud(laserCloudMsg);
-
         if (transformCloud() == false) return;
 
         cloud2Matrix();
@@ -144,14 +142,14 @@ public:
 
         publishCloud();
 
-        publishLaserScan();
+        // publishLaserScan();
 
         resetParameters();
     }
     
     void velodyne2RangeCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
         
-        // fill laserCloudIn as LeGO-LOAM format from raw velodyne points
+        // transform raw point cloud into range image format
         pcl::fromROSMsg(*laserCloudMsg, *laserCloudRaw);
         std::vector<int> indices;
         pcl::removeNaNFromPointCloud(*laserCloudRaw,*laserCloudRaw,indices);
@@ -211,26 +209,6 @@ public:
     }
 
 
-    void extractRawCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
-        // ROS msg -> PCL cloud
-        // This function need LeGO-LOAM input pointcloud
-        pcl::fromROSMsg(*laserCloudMsg, *laserCloudIn);
-        int nPoints = laserCloudIn->points.size();
-        // cout << "valid cloud size = " << nPoints << endl;
-        // extract range info
-        for (int i = 0; i < N_SCAN; ++i){
-            for (int j = 0; j < Horizon_SCAN; ++j){
-                int index = j  + i * Horizon_SCAN;
-                // skip NaN point
-                if (laserCloudIn->points[index].intensity == std::numeric_limits<float>::quiet_NaN()) continue; // index在points中越界（但是为什么会越界md）
-                // save range info
-                rangeMatrix.at<float>(i, j) = laserCloudIn->points[index].intensity;
-                // reset obstacle status to 0 - free 
-                obstacleMatrix.at<int>(i, j) = 0;
-            }
-        }
-    }
-
     void extractRawCloud(){
         // ROS msg -> PCL cloud
         // This function takes need call of function "velodyne2RangeCloud"
@@ -283,7 +261,7 @@ public:
     void applyFilter(){
 
         if (urbanMapping == true){
-            positiveCurbFilter();
+            positiveCurbFilter2();
             negativeCurbFilter();
         }
         // negativeCurbFilter();
@@ -335,9 +313,117 @@ public:
         }
     }
     */
+    void positiveCurbFilter3()
+    {
+        pcl::NormalEstimation<PointType, pcl::Normal> n;
+        pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
+        //建立kdtree来进行近邻点集搜索
+        pcl::search::KdTree<PointType>::Ptr tree(new pcl::search::KdTree<PointType>);
+        pcl::PointCloud<PointType>::Ptr laserCloudforNormal(new pcl::PointCloud<PointType>);
+        std::vector<int> indices;
+        laserCloudIn->is_dense = false;
+        pcl::removeNaNFromPointCloud(*laserCloudIn, *laserCloudforNormal, indices);
+        // cout << laserCloudIn->points.size() << " " << laserCloudforNormal->points.size() << endl;
+        tree->setInputCloud(laserCloudforNormal); 
+        n.setInputCloud(laserCloudforNormal);
+        n.setSearchMethod(tree);
+        n.setKSearch(7);
+        n.setViewPoint(0.0f, 0.0f, sensorHeight);
+        n.compute(*normals);
+
+        for (int i = 0; i < scanNumCurbFilter; i++) {
+            for (int j = 0; j < Horizon_SCAN; j++) {
+                if (obstacleMatrix.at<int>(i,j) == 1) {
+                    continue;
+                }
+                if (rangeMatrix.at<float>(i, j) > sensorRangeLimit || rangeMatrix.at<float>(i,j) == -1) {
+                    continue;
+                }
+                int index = j + i * Horizon_SCAN;
+                if (std::find(indices.begin(), indices.end(), index) != indices.end()) {
+                    float dot = normals->at(index).getNormalVector3fMap().normalized().dot(Eigen::Vector3f::UnitZ());
+                    if(std::abs(dot) > std::cos(70.0 * M_PI / 180.0)) {
+                        obstacleMatrix.at<int>(i,j) = 1;
+                    }
+                }
+            }
+        }
+    }
+
+    void positiveCurbFilter2()
+    {
+        int rangeNormCalculation = 6;
+        for (int i = 0; i < scanNumCurbFilter; i++) {
+            for (int j = rangeNormCalculation; j < Horizon_SCAN - rangeNormCalculation; j++) {
+                if (obstacleMatrix.at<int>(i, j) == 1) {
+                    continue;
+                }
+                if (rangeMatrix.at<float>(i, j) > sensorRangeLimit || rangeMatrix.at<float>(i,j) == -1) {
+                    continue;
+                }
+                // int index = j  + i * Horizon_SCAN;
+                vector<float> neighborArray;
+                for (int k = -rangeNormCalculation; k <= rangeNormCalculation; k++) {
+                    if (rangeMatrix.at<float>(i,j+k) != -1) {
+                        neighborArray.push_back(laserCloudMatrix[i][j+k].x);
+                        neighborArray.push_back(laserCloudMatrix[i][j+k].y);
+                        neighborArray.push_back(laserCloudMatrix[i][j+k].z);
+                    }
+                }
+                if (i - 1 >= 0) {
+                    for (int k = -rangeNormCalculation; k <= rangeNormCalculation; k++) {
+                        if (rangeMatrix.at<float>(i-1,j+k) != -1) {
+                            neighborArray.push_back(laserCloudMatrix[i-1][j+k].x);
+                            neighborArray.push_back(laserCloudMatrix[i-1][j+k].y);
+                            neighborArray.push_back(laserCloudMatrix[i-1][j+k].z);
+                        }
+                    }
+                }
+                if (i + 1 < scanNumCurbFilter) {
+                    for (int k = -rangeNormCalculation; k <= rangeNormCalculation; k++) {
+                        if (rangeMatrix.at<float>(i+1,j+k) != -1) {
+                            neighborArray.push_back(laserCloudMatrix[i+1][j+k].x);
+                            neighborArray.push_back(laserCloudMatrix[i+1][j+k].y);
+                            neighborArray.push_back(laserCloudMatrix[i+1][j+k].z);
+                        }
+                    }
+                }
+                Eigen::MatrixXf matPoints = Eigen::Map<const Eigen::Matrix<float, -1, -1, Eigen::RowMajor>>(neighborArray.data(), neighborArray.size() / 3, 3);
+                Eigen::MatrixXf centered = matPoints.rowwise() - matPoints.colwise().mean();
+                Eigen::MatrixXf cov = (centered.adjoint() * centered); //协方差矩阵
+                Eigen::EigenSolver<Eigen::Matrix3f> es(cov);
+                Eigen::Matrix3f D = es.pseudoEigenvalueMatrix();
+                Eigen::Matrix3f V = es.pseudoEigenvectors();
+                int rowIdx, colIdx;
+                D.minCoeff(&rowIdx, &colIdx);
+                Eigen::Vector3f normal = V.col(colIdx);
+                normal /= normal.norm();
+                // cout << "normal = " << normal.transpose() << endl;
+                float slopeAngle = std::acos(std::fabs(normal(2))) / M_PI * 180;
+                // cout << "slope angle = " << slopeAngle << endl;
+                // Eigen::Matrix3Xf points = matPoints.transpose();
+                // Eigen::Matrix3Xf center = points.colwise() - points.rowwise().mean();
+                // int setting = Eigen::ComputeFullU | Eigen::ComputeThinV;
+                // Eigen::JacobiSVD<Eigen::Matrix3Xf> svd = center.jacobiSvd(setting);
+                // Eigen::Matrix3Xf U = svd.matrixU();
+                // Eigen::Vector3f normal = U.col(2);
+                // float slopeAngle = getDegAngle(normal, Eigen::Vector3f(0,0,1));
+                if(fabs(slopeAngle - 90) > 10.0) {obstacleMatrix.at<int>(i,j) = 1;}
+            }
+        }
+    }
+    double getDegAngle(Eigen::Vector3f v1, Eigen::Vector3f v2) 
+    {
+        
+        //one method, radian_angle belong to 0~pi
+        //double radian_angle = atan2(v1.cross(v2).transpose() * (v1.cross(v2) / v1.cross(v2).norm()), v1.transpose() * v2);
+        //another method, radian_angle belong to 0~pi
+        double radian_angle = atan2(v1.cross(v2).norm(), v1.transpose() * v2);
+        return radian_angle * 180 / M_PI;
+    }
     void positiveCurbFilter() // positive curb 有用了但是噪声不少
     {
-        int rangeCompareNeighborNum = 4;
+        int rangeCompareNeighborNum = 3;
         float diff[Horizon_SCAN - 1];
 
         for (int i = 0; i < scanNumCurbFilter; ++i){
@@ -353,9 +439,13 @@ public:
                     continue;
                 }
                 vector<float> neighborArray; // valid neighboring points (in order)
+                float minZ = FLT_MAX;
+                float maxZ = FLT_MIN;
                 for (int k = -rangeCompareNeighborNum; k <= rangeCompareNeighborNum; k++) {
                     if (rangeMatrix.at<float>(i,j+k) != -1) {
                         neighborArray.push_back(rangeMatrix.at<float>(i,j+k));
+                        minZ = min(laserCloudMatrix[i][j].z, minZ);
+                        maxZ = max(laserCloudMatrix[i][j].z, maxZ);
                     }
                 }
 
@@ -364,7 +454,7 @@ public:
                 float max_diff = maxR - minR;
                 // check monotonic
                 if (!isMonotonic(neighborArray)) continue;
-                if (max_diff / rangeMatrix.at<float>(i, j) < 0.02) {
+                if (max_diff / rangeMatrix.at<float>(i, j) < 0.02 ) {
                     continue;
                 }
                 obstacleMatrix.at<int>(i, j) = 1;
@@ -576,6 +666,7 @@ public:
                 // if (obstFlag[i][j] == true || maxHeight[i][j] - minHeight[i][j] > filterHeightLimit)
                 if (maxHeight[i][j] - minHeight[i][j] > filterHeightLimit) {
                     obstFlag[i][j] = true;
+                    /*
                     int linear_idx = i * helper + j;
                     if (heightmap.find(linear_idx) != heightmap.end()) {
                         // multiply height value exist
@@ -593,6 +684,7 @@ public:
                             }
                         }
                     }
+                    */
                 }
                 if (obstFlag[i][j] == true)
                 {
@@ -698,7 +790,7 @@ public:
                 p.x = xTestVec[0];
                 p.y = xTestVec[1];
                 p.z = elevation;
-                p.intensity = (occupancy > 0.5) ? 100 : 0;
+                p.intensity = (occupancy > 0.7) ? 100 : 0;
 
                 laserCloudOut->push_back(p);
             }

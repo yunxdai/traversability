@@ -83,20 +83,23 @@ POINT_CLOUD_REGISTER_POINT_STRUCT (PointXYZIR,
                                    (uint16_t, ring, ring)
 )
 
+
+// 来个pointcloud type PointXYZI(Intensity)O(Occupancy)L(Label)
+
 typedef pcl::PointXYZI  PointType;
 typedef struct kdtree kdtree_t;
 typedef struct kdres kdres_t;
 
 // Point Cloud Type
-extern const bool useCloudRing = false;
+extern const bool useCloudRing = true;
 
 // Environment
-extern const bool urbanMapping = false;
+extern const bool urbanMapping = true;
 
 // VLP-16
 extern const int N_SCAN = 16;
 extern const int Horizon_SCAN = 1800;
-// extern const int Horizon_SCAN = 900;
+// extern const int Horizon_SCAN = 1200;
 extern const float sensorMinimumRange = 1.0;
 extern const float ang_res_x = 0.2;
 extern const float ang_res_y = 2.0;
@@ -111,15 +114,15 @@ extern const int rootCubeIndex = mapArrayLength / 2; // by default, robot is at 
 
 // Filter Ring Params
 extern const int scanNumCurbFilter = 8;
-extern const int scanNumSlopeFilter = 8;
+extern const int scanNumSlopeFilter = 5;
 extern const int scanNumMax = std::max(scanNumCurbFilter, scanNumSlopeFilter);
 // extern const int scanNumMax = 16;
 
 
 // Filter Threshold Params
 // extern const float sensorRangeLimit = 12; // only keep points with in ... meters
-extern const float sensorRangeLimit = 12;   
-extern const float filterHeightLimit = (urbanMapping == true) ? 0.1 : 0.15; // step diff threshold
+extern const float sensorRangeLimit = 10;   
+extern const float filterHeightLimit = (urbanMapping == true) ? 0.05 : 0.15; // step diff threshold
 // extern const float filterHeightLimit = (urbanMapping == true) ? 0.05 : 0.15; // step diff threshold         
 extern const float filterAngleLimit = 20; // slope angle threshold          
 extern const int filterHeightMapArrayLength = sensorRangeLimit * 2 / mapResolution;
@@ -135,13 +138,13 @@ extern const float large_log_odds = 100;
 extern const float max_log_odds_for_belief = 20;
 
 // 2D Map Publish Params
-extern const int localMapLength = 20; // length of the local occupancy grid map (meter)
+extern const int localMapLength = 10; // length of the local occupancy grid map (meter)
 extern const int localMapArrayLength = localMapLength / mapResolution;
 
 // Visualization Params
 extern const float visualizationRadius = 50;
 // extern const float visualizationFrequency = 2; // n, skip n scans then publish, n=0, visualize at each scan
-extern const float visualizationFrequency = 0; // n, skip n scans then publish, n=0, visualize at each scan
+extern const float visualizationFrequency = 2; // n, skip n scans then publish, n=0, visualize at each scan
 // Robot Params
 extern const float robotRadius = 0.2;
 // extern const float sensorHeight = 0.5;
@@ -151,7 +154,7 @@ extern const float sensorHeight = 0.87;
 // extern const int traversabilityObserveTimeTh = 10;
 // extern const float traversabilityCalculatingDistance = 8.0;
 extern const int traversabilityObserveTimeTh = 2;
-extern const float traversabilityCalculatingDistance = 20.0;
+extern const float traversabilityCalculatingDistance = 8.0;
 // Planning Cost Params
 extern const int NUM_COSTS = 3;
 extern const int tmp[] = {2};
