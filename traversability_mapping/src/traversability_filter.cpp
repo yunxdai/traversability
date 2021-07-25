@@ -45,22 +45,12 @@ private:
 public:
     TraversabilityFilter():
         nh("~"){
-        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/full_cloud_info", 5, &TraversabilityFilter::cloudHandler, this);
         subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
-        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_cloud_registered_output", 5, &TraversabilityFilter::cloudHandler, this);
         pubCloud = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud", 5);
         pubCloudVisualHiRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_high_res", 5);
         pubCloudVisualLowRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_low_res", 5);
-        pubLaserScan = nh.advertise<sensor_msgs::LaserScan> ("/pointcloud_2_laserscan", 5);  
 
-        nanPoint.x = std::numeric_limits<float>::quiet_NaN();
-        nanPoint.y = std::numeric_limits<float>::quiet_NaN();
-        nanPoint.z = std::numeric_limits<float>::quiet_NaN();
-        nanPoint.intensity = -1;
-        
         allocateMemory();
-
-        pointcloud2laserscanInitialization();
     }
 
     void allocateMemory(){
@@ -70,6 +60,7 @@ public:
 
         laserCloudIn.reset(new pcl::PointCloud<PointType>());
         laserCloudIn->points.resize(N_SCAN * Horizon_SCAN);
+
         laserCloudOut.reset(new pcl::PointCloud<PointType>());
         laserCloudObstacles.reset(new pcl::PointCloud<PointType>());
 
@@ -96,13 +87,18 @@ public:
         for (int i = 0; i < filterHeightMapArrayLength; ++i)
             maxHeight[i] = new float[filterHeightMapArrayLength];
 
+
+        nanPoint.x = std::numeric_limits<float>::quiet_NaN();
+        nanPoint.y = std::numeric_limits<float>::quiet_NaN();
+        nanPoint.z = std::numeric_limits<float>::quiet_NaN();
+        nanPoint.intensity = -1;
+
         resetParameters();
     }
 
     void resetParameters(){
         laserCloudRaw->clear();
 
-        // laserCloudIn->clear();
         laserCloudOut->clear();
         laserCloudObstacles->clear();
 
@@ -126,8 +122,6 @@ public:
         
         velodyne2RangeCloud(laserCloudMsg);
         
-        extractRawCloud();
-
         if (transformCloud() == false) return;
 
         cloud2Matrix();
@@ -141,8 +135,6 @@ public:
         predictCloudBGK();
 
         publishCloud();
-
-        // publishLaserScan();
 
         resetParameters();
     }
@@ -163,9 +155,7 @@ public:
         // save timestamp (for transform)
         pcMsgTimeStamp = laserCloudMsg->header.stamp;
         size_t cloudSize = laserCloudRaw->points.size();
-        // cout << "raw cloud size = " << cloudSize << endl;
-        // PointType thisPoint;
-        PointXYZIR thisPoint;
+        PointType thisPoint;
         float verticalAngle, horizonAngle, range;
         size_t rowIdn, columnIdn, index;
 
@@ -192,38 +182,19 @@ public:
             if (columnIdn < 0 || columnIdn >= Horizon_SCAN) continue;
 
             range = sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y + thisPoint.z * thisPoint.z);
-            // range = sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y);
+
             if (range < sensorMinimumRange) continue;
             index = columnIdn + rowIdn * Horizon_SCAN;
-            // laserCloudIn->points[index] = thisPoint;
 
             PointType tempPoint;
             tempPoint.x = thisPoint.x;
             tempPoint.y = thisPoint.y;
             tempPoint.z = thisPoint.z;
-            laserCloudIn->points[index] = tempPoint;
-            laserCloudIn->points[index].intensity = range;
+            laserCloudIn->points[index] = thisPoint;
 
             intensityMatrix.at<float>(rowIdn, columnIdn) = thisPoint.intensity;
-        }
-    }
-
-
-    void extractRawCloud(){
-        // ROS msg -> PCL cloud
-        // This function takes need call of function "velodyne2RangeCloud"
-        int nPoints = laserCloudIn->points.size();
-        // extract range info
-        for (int i = 0; i < N_SCAN; ++i){
-            for (int j = 0; j < Horizon_SCAN; ++j){
-                int index = j  + i * Horizon_SCAN;
-                // skip NaN point
-                if (laserCloudIn->points[index].intensity == std::numeric_limits<float>::quiet_NaN()) continue;
-                // save range info
-                rangeMatrix.at<float>(i, j) = laserCloudIn->points[index].intensity;
-                // reset obstacle status to 0 - free 
-                obstacleMatrix.at<int>(i, j) = 0;
-            }
+            rangeMatrix.at<float>(rowIdn, columnIdn) = range;
+            obstacleMatrix.at<int>(rowIdn, columnIdn) = 0;
         }
     }
 
@@ -269,89 +240,8 @@ public:
         // slopeFilter();
         // intensityFilter();
     }
-    /*
-    void positiveCurbFilter() // positive curb filter基本没用，有巨大问题
-    {
-        int rangeCompareNeighborNum = 3;
-        float diff[Horizon_SCAN - 1];
 
-        for (int i = 0; i < scanNumCurbFilter; ++i){
-            // calculate range difference
-            for (int j = 0; j < Horizon_SCAN - 1; ++j)
-                diff[j] = rangeMatrix.at<float>(i, j) - rangeMatrix.at<float>(i, j+1); // 同一个ring上相邻点的range difference
-
-            for (int j = rangeCompareNeighborNum; j < Horizon_SCAN - rangeCompareNeighborNum; ++j){
-                // Point that has been verified by other filters
-                if (obstacleMatrix.at<int>(i, j) == 1) {
-                    continue;
-                }
-                bool breakFlag = false;
-                // point is too far away, skip comparison since it can be inaccurate
-                if (rangeMatrix.at<float>(i, j) > sensorRangeLimit) {
-                    continue;
-                }
-                // make sure all points have valid range info
-                for (int k = -rangeCompareNeighborNum; k <= rangeCompareNeighborNum; ++k) {
-                    if (rangeMatrix.at<float>(i, j+k) == -1){
-                        breakFlag = true;
-                        break;
-                    }
-                }
-                if (breakFlag == true) { continue; }
-                // range difference should be monotonically increasing or decresing
-                for (int k = -rangeCompareNeighborNum; k < rangeCompareNeighborNum-1; ++k)
-                    if (diff[j+k] * diff[j+k+1] <= 0){
-                        breakFlag = true;
-                        break;
-                    }
-                if (breakFlag == true) { continue; }
-                // the range difference between the start and end point of neighbor points is smaller than a threashold, then continue
-                if (fabs(rangeMatrix.at<float>(i, j-rangeCompareNeighborNum) - rangeMatrix.at<float>(i, j+rangeCompareNeighborNum)) /rangeMatrix.at<float>(i, j) < 0.01) {
-                    continue;
-                }
-                obstacleMatrix.at<int>(i, j) = 1;
-            }
-        }
-    }
-    */
-    void positiveCurbFilter3()
-    {
-        pcl::NormalEstimation<PointType, pcl::Normal> n;
-        pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
-        //建立kdtree来进行近邻点集搜索
-        pcl::search::KdTree<PointType>::Ptr tree(new pcl::search::KdTree<PointType>);
-        pcl::PointCloud<PointType>::Ptr laserCloudforNormal(new pcl::PointCloud<PointType>);
-        std::vector<int> indices;
-        laserCloudIn->is_dense = false;
-        pcl::removeNaNFromPointCloud(*laserCloudIn, *laserCloudforNormal, indices);
-        // cout << laserCloudIn->points.size() << " " << laserCloudforNormal->points.size() << endl;
-        tree->setInputCloud(laserCloudforNormal); 
-        n.setInputCloud(laserCloudforNormal);
-        n.setSearchMethod(tree);
-        n.setKSearch(7);
-        n.setViewPoint(0.0f, 0.0f, sensorHeight);
-        n.compute(*normals);
-
-        for (int i = 0; i < scanNumCurbFilter; i++) {
-            for (int j = 0; j < Horizon_SCAN; j++) {
-                if (obstacleMatrix.at<int>(i,j) == 1) {
-                    continue;
-                }
-                if (rangeMatrix.at<float>(i, j) > sensorRangeLimit || rangeMatrix.at<float>(i,j) == -1) {
-                    continue;
-                }
-                int index = j + i * Horizon_SCAN;
-                if (std::find(indices.begin(), indices.end(), index) != indices.end()) {
-                    float dot = normals->at(index).getNormalVector3fMap().normalized().dot(Eigen::Vector3f::UnitZ());
-                    if(std::abs(dot) > std::cos(70.0 * M_PI / 180.0)) {
-                        obstacleMatrix.at<int>(i,j) = 1;
-                    }
-                }
-            }
-        }
-    }
-
-    void positiveCurbFilter2()
+    void positiveCurbFilter2() // Detect Positive Curbs by Normal Vector
     {
         int rangeNormCalculation = 6;
         for (int i = 0; i < scanNumCurbFilter; i++) {
@@ -399,9 +289,8 @@ public:
                 D.minCoeff(&rowIdx, &colIdx);
                 Eigen::Vector3f normal = V.col(colIdx);
                 normal /= normal.norm();
-                // cout << "normal = " << normal.transpose() << endl;
                 float slopeAngle = std::acos(std::fabs(normal(2))) / M_PI * 180;
-                // cout << "slope angle = " << slopeAngle << endl;
+                ///////////////// USING SVD //////////////
                 // Eigen::Matrix3Xf points = matPoints.transpose();
                 // Eigen::Matrix3Xf center = points.colwise() - points.rowwise().mean();
                 // int setting = Eigen::ComputeFullU | Eigen::ComputeThinV;
@@ -415,14 +304,11 @@ public:
     }
     double getDegAngle(Eigen::Vector3f v1, Eigen::Vector3f v2) 
     {
-        
-        //one method, radian_angle belong to 0~pi
-        //double radian_angle = atan2(v1.cross(v2).transpose() * (v1.cross(v2) / v1.cross(v2).norm()), v1.transpose() * v2);
-        //another method, radian_angle belong to 0~pi
         double radian_angle = atan2(v1.cross(v2).norm(), v1.transpose() * v2);
         return radian_angle * 180 / M_PI;
     }
-    void positiveCurbFilter() // positive curb 有用了但是噪声不少
+
+    void positiveCurbFilter() // Reimplement the idea in original code
     {
         int rangeCompareNeighborNum = 3;
         float diff[Horizon_SCAN - 1];
@@ -477,7 +363,9 @@ public:
         }
         return true;
     }
-    void negativeCurbFilter(){
+
+
+    void negativeCurbFilter() {
         int rangeCompareNeighborNum = 3;
 
         for (int i = 0; i < scanNumCurbFilter; ++i){
@@ -500,7 +388,6 @@ public:
                         continue;
                     // height diff greater than threshold, might be a negative curb
 
-                    // if里的第一个条件要不要abs?
                     if (fabs(laserCloudMatrix[i][j].z - laserCloudMatrix[i][k].z) > 0.1
                         && pointDistance(laserCloudMatrix[i][j], laserCloudMatrix[i][k]) <= 1.0){
                         obstacleMatrix.at<int>(i, j) = 1; 
@@ -576,7 +463,7 @@ public:
                     continue;
                 // update point intensity (occupancy) into
                 PointType p = laserCloudMatrix[i][j];
-                p.intensity = obstacleMatrix.at<int>(i,j) == 1 ? 100 : 0;
+                p.intensity = obstacleMatrix.at<int>(i,j) == 1 ? 100 : 0; // 不应该让intensity表示occupancy
                 // save updated points
                 laserCloudOut->push_back(p);
                 // extract obstacle points and convert them to laser scan
@@ -609,10 +496,11 @@ public:
         int cloudSize = laserCloudOut->points.size();
         for (int i = 0; i < cloudSize; ++i){
 
-            int idx = (laserCloudOut->points[i].x - localMapOrigin.x) / mapResolution;
+            // 这里的idx, idy是二维平面的坐标；之前的i是row idx
+            int idx = (laserCloudOut->points[i].x - localMapOrigin.x) / mapResolution; 
             int idy = (laserCloudOut->points[i].y - localMapOrigin.y) / mapResolution;
             
-            int linear_idx = idx * helper + idy; // easy from linear_idx to idx / idy
+            int linear_idx = idx * (filterHeightMapArrayLength + 1) + idy; // easy from linear_idx to idx / idy
             // points out of boundry
             if (idx < 0 || idy < 0 || idx >= filterHeightMapArrayLength || idy >= filterHeightMapArrayLength)
                 continue;
@@ -621,6 +509,7 @@ public:
                 obstFlag[idx][idy] = true;
 
             heightmap[linear_idx].push_back(laserCloudOut->points[i].z);
+
             if (initFlag[idx][idy] == false){
                 minHeight[idx][idy] = laserCloudOut->points[i].z;
                 maxHeight[idx][idy] = laserCloudOut->points[i].z;
@@ -631,25 +520,6 @@ public:
             }
         }
         float vehicleHeight = 1.0;
-        /*
-        // process hanging over structure
-        for (auto it = heightmap.begin(); it != heightmap.end(); it++) {
-            int idx = it->first / helper;
-            int idy = it->first % helper;
-            auto& heightPoint = it->second;
-            cout << "DEBUGGING EXAMPLE: height point size at (" << idx << "," << idy << ") is " << heightPoint.size() << endl; 
-            sort(heightPoint.begin(),heightPoint.end());
-            float lowestHeight = 0;
-            for (int i = 0; i < heightPoint.size() - 1; i++) {
-                if (i == 0) lowestHeight = heightPoint[i];
-                else {
-                    if (heightPoint[i+1] - heightPoint[i] > vehicleHeight && heightPoint[i] - lowestHeight < traversableHeight) {
-                        obstFlag[idx][idy] = true; // 应该是标记成clear的，此处仅供测试用
-                    }
-                }
-            }
-        }
-        */
         // intermediate cloud (adding process for hanging over structure)
         pcl::PointCloud<PointType>::Ptr laserCloudTemp(new pcl::PointCloud<PointType>());
         // convert from height map to point cloud
@@ -667,12 +537,11 @@ public:
                 // if (obstFlag[i][j] == true || maxHeight[i][j] - minHeight[i][j] > filterHeightLimit)
                 if (maxHeight[i][j] - minHeight[i][j] > filterHeightLimit) {
                     obstFlag[i][j] = true;
-                    /*
+                    
                     int linear_idx = i * helper + j;
                     if (heightmap.find(linear_idx) != heightmap.end()) {
                         // multiply height value exist
                         auto& heightVec = heightmap[linear_idx];
-                        // cout << "DEBUGGING EXAMPLE: height point size at (" << i << "," << j << ") is " << heightVec.size() << endl; 
                         sort(heightVec.begin(),heightVec.end());
                         float lowestHeight = 0;
                         for (int k = 0; k < heightVec.size() - 1; k++) {
@@ -685,14 +554,12 @@ public:
                             }
                         }
                     }
-                    */
+                    
                 }
                 if (obstFlag[i][j] == true)
                 {
-                    // obstFlag[i][j] = true;
                     thisPoint.intensity = 100; // obstacle
-                    laserCloudTemp->push_back(thisPoint);
-                    // laserCloudObstacles->push_back(thisPoint);
+                    laserCloudTemp->push_back(thisPoint); // 这里这个把occupancy附给intensity的问题也需要解决
                 }else{
                     thisPoint.intensity = 0; // free
                     laserCloudTemp->push_back(thisPoint);
@@ -708,7 +575,6 @@ public:
             sensor_msgs::PointCloud2 laserCloudTemp;
             pcl::toROSMsg(*laserCloudOut, laserCloudTemp);
             laserCloudTemp.header.stamp = ros::Time::now();
-            // laserCloudTemp.header.stamp = pcMsgTimeStamp;
             laserCloudTemp.header.frame_id = "map";
             pubCloudVisualLowRes.publish(laserCloudTemp);
         }
@@ -731,7 +597,7 @@ public:
                 testPoint.y = localMapOrigin.y + j * mapResolution + mapResolution / 2.0;
                 testPoint.z = robotPoint.z; // this value is not used except for computing distance with robotPoint
                 // skip grids too far
-                if (pointDistance(testPoint, robotPoint) > sensorRangeLimit) // 所以这里算的其实是水平距离
+                if (pointDistance(testPoint, robotPoint) > sensorRangeLimit)
                     continue;
                 // Training data
                 vector<float> xTrainVec; // training data x and y coordinates
@@ -824,59 +690,6 @@ public:
         pubCloud.publish(laserCloudTemp);
     }
 
-    void publishLaserScan(){
-
-        updateLaserScan();
-
-        laserScan.header.stamp = ros::Time::now();
-        // laserScan.header.stamp = pcMsgTimeStamp;
-        pubLaserScan.publish(laserScan);
-        // initialize laser scan for new scan
-        std::fill(laserScan.ranges.begin(), laserScan.ranges.end(), laserScan.range_max + 1.0);
-    }
-
-    void updateLaserScan(){
-
-        try{listener.lookupTransform("base_link","map", ros::Time(0), transform);}
-        // try{listener.lookupTransform("base_link","map", pcMsgTimeStamp, transform);}
-        
-        catch (tf::TransformException ex){ /*ROS_ERROR("Transfrom Failure.");*/ return; }
-
-        laserCloudObstacles->header.frame_id = "map";
-        laserCloudObstacles->header.stamp = 0;
-        // transform obstacle cloud back to "base_link" frame
-        pcl::PointCloud<PointType> laserCloudTemp;
-        pcl_ros::transformPointCloud("base_link", *laserCloudObstacles, laserCloudTemp, listener);
-        //convert point to scan
-        int cloudSize = laserCloudTemp.points.size();
-        for (int i = 0; i < cloudSize; ++i){
-            PointType *point = &laserCloudTemp.points[i];
-            float x = point->x;
-            float y = point->y;
-            float range = std::sqrt(x*x + y*y);
-            float angle = std::atan2(y, x);
-            int index = (angle - laserScan.angle_min) / laserScan.angle_increment;
-            if (index >= 0 && index < laserScan.ranges.size())
-                laserScan.ranges[index] = std::min(laserScan.ranges[index], range);
-        } 
-    }
-
-    void pointcloud2laserscanInitialization(){
-
-        laserScan.header.frame_id = "base_link"; // assume laser has the same frame as the robot
-
-        laserScan.angle_min = -M_PI;
-        laserScan.angle_max =  M_PI;
-        laserScan.angle_increment = 1.0f / 180 * M_PI;
-        laserScan.time_increment = 0;
-
-        laserScan.scan_time = 0.1;
-        laserScan.range_min = 0.3;
-        laserScan.range_max = 100;
-
-        int range_size = std::ceil((laserScan.angle_max - laserScan.angle_min) / laserScan.angle_increment);
-        laserScan.ranges.assign(range_size, laserScan.range_max + 1.0);
-    }
 };
 
 
