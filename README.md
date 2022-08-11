@@ -9,7 +9,7 @@ This is a repository for traversability mapping for UGVs in ROS. The code is mod
 - Install [ROS Navigation stack](http://wiki.ros.org/navigation). You can install it by running ```sudo apt-get install ros-version-navigation```. If you are using other versions of ROS, replace indigo in the command with your ROS version.
 
 
-## Run the System (in simulation)
+## Run mapping only
 
 1. Run the launch file:
 ```
@@ -17,25 +17,25 @@ roslaunch traversability_mapping offline.launch
 ```
 or
 ```
-roslaunch traversability_mapping dyx.launch
+roslaunch traversability_mapping run_mapping.launch
 ```
-and set ```use_sim_time``` as ```true```
+set ```use_sim_time``` as ```true``` if in simulation
 
 2. Play existing bag files:
 ```
 rosbag play *.bag --clock --topic /velodyne_points
 ```
 
-## Run the System (with real robot)
+## Run mapping and navigation
 
 Run the launch file:
 <!-- ```
 roslaunch traversability_mapping online.launch
 ``` -->
 ```
-roslaunch traversability_mapping dyx.launch
+roslaunch traversability_mapping run_mapping_w_nav.launch
 ```
-and set ```use_sim_time``` as ```false```
+set ```use_sim_time``` as ```true``` if in simulation
 
 <!-- ## Cite *Traversability_Mapping*
 
