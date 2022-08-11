@@ -61,10 +61,10 @@ link_directories(
 ## Build ##
 ###########
 
-# Service Test
-add_executable(service_test src/srv_test.cpp)
-add_dependencies(service_test ${catkin_EXPORTED_TARGETS} elevation_msgs_gencpp)
-target_link_libraries(service_test ${catkin_LIBRARIES})
+# # Service Test
+# add_executable(service_test src/srv_test.cpp)
+# add_dependencies(service_test ${catkin_EXPORTED_TARGETS} elevation_msgs_gencpp)
+# target_link_libraries(service_test ${catkin_LIBRARIES})
 
 # Range Image Filter
 add_executable(traversability_filter src/traversability_filter.cpp)
@@ -75,11 +75,11 @@ add_executable(traversability_map src/traversability_map.cpp)
 add_dependencies(traversability_map ${catkin_EXPORTED_TARGETS} elevation_msgs_gencpp)
 target_link_libraries(traversability_map ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${OpenCV_LIBRARIES})
 
-# Edge Detection on Occupancy Grid
-add_executable(boundary_detection src/edge_on_grid.cpp)
-target_link_libraries(boundary_detection ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+# # Edge Detection on Occupancy Grid
+# add_executable(boundary_detection src/edge_on_grid.cpp)
+# target_link_libraries(boundary_detection ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
-# Pointcloud Intensity Calibration
+# # Pointcloud Intensity Calibration
 # add_executable(intensity_calibration src/intensity_calibration.cpp)
 # target_link_libraries(intensity_calibration ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
