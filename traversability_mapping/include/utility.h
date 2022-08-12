@@ -94,7 +94,7 @@ typedef struct kdres kdres_t;
 extern const bool useCloudRing = true;
 
 // Environment
-extern const bool urbanMapping = true;
+extern const bool urbanMapping = false;
 
 // VLP-16
 extern const int N_SCAN = 16;

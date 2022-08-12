@@ -46,8 +46,6 @@ private:
     
     ros::Time initialTime_;
     
-    // Service
-    // ros::ServiceServer service;
 public:
     TraversabilityMapping():
         nh("~"),
@@ -63,200 +61,12 @@ public:
         // publish elevation map for visualization
         pubElevationCloud = nh.advertise<sensor_msgs::PointCloud2> ("/elevation_pointcloud", 5);
         initialTime_ = ros::Time::now();    
-        // Service
-        // service = nh.advertiseService("/test", &TraversabilityMapping::serviceCallback, this);
+
         allocateMemory(); 
     }
 
     ~TraversabilityMapping(){}
-    /*
-    bool serviceCallback(elevation_msgs::occupancyLocal::Request &req, elevation_msgs::occupancyLocal::Response &res) {
-        // do traversability computation
-        // res.occupancy = occupancyMap2DHeight.occupancy;
-        if (getRobotPosition() == false) return false;
-
-
-        
-        // local map origin x and y
-        localMapOriginPoint.x = robotPoint.x - localMapLength / 2;
-        localMapOriginPoint.y = robotPoint.y - localMapLength / 2;
-        localMapOriginPoint.z = robotPoint.z;
-        // local map origin cube id (in global map)
-        localMapOriginGrid.cubeX = int((localMapOriginPoint.x + mapCubeLength/2.0) / mapCubeLength) + rootCubeIndex;
-        localMapOriginGrid.cubeY = int((localMapOriginPoint.y + mapCubeLength/2.0) / mapCubeLength) + rootCubeIndex;
-        if (localMapOriginPoint.x + mapCubeLength/2.0 < 0)  --localMapOriginGrid.cubeX;
-        if (localMapOriginPoint.y + mapCubeLength/2.0 < 0)  --localMapOriginGrid.cubeY;
-        // local map origin grid id (in sub-map)
-        float originCubeOriginX, originCubeOriginY; // the orign of submap that the local map origin belongs to (note the submap may not be created yet, cannot use originX and originY)
-        originCubeOriginX = (localMapOriginGrid.cubeX - rootCubeIndex) * mapCubeLength - mapCubeLength/2.0;
-        originCubeOriginY = (localMapOriginGrid.cubeY - rootCubeIndex) * mapCubeLength - mapCubeLength/2.0;
-        localMapOriginGrid.gridX = int((localMapOriginPoint.x - originCubeOriginX) / mapResolution);
-        localMapOriginGrid.gridY = int((localMapOriginPoint.y - originCubeOriginY) / mapResolution);
-        
-        // Initialize response
-        res.occupancy.header.frame_id = "map";
-        res.occupancy.header.stamp = ros::Time::now();
-        res.occupancy.info.width = localMapArrayLength;
-        res.occupancy.info.height = localMapArrayLength;
-        res.occupancy.info.resolution = mapResolution;
-        res.occupancy.info.origin.orientation.x = 0.0;
-        res.occupancy.info.origin.orientation.y = 0.0;
-        res.occupancy.info.origin.orientation.z = 0.0;
-        res.occupancy.info.origin.orientation.w = 1.0;
-
-        res.occupancy.info.origin.position.x = localMapOriginPoint.x;
-        res.occupancy.info.origin.position.y = localMapOriginPoint.y;
-        res.occupancy.info.origin.position.z = localMapOriginPoint.z + 10; // add 10, just for visualization
-        res.occupancy.data.resize(occupancyMap2DHeight.occupancy.info.width * occupancyMap2DHeight.occupancy.info.height);
-        std::fill(res.occupancy.data.begin(), res.occupancy.data.end(), -1);
-
-        for (int i = 0; i < localMapArrayLength; i++) {
-            for (int j = 0; j < localMapArrayLength; j++) {
-                // only compute local traversability
-                int indX = localMapOriginGrid.gridX + i;
-                int indY = localMapOriginGrid.gridY + j;
-
-                grid_t thisGrid;
-
-                thisGrid.cubeX = localMapOriginGrid.cubeX + indX / mapCubeArrayLength;
-                thisGrid.cubeY = localMapOriginGrid.cubeY + indY / mapCubeArrayLength;
-
-                thisGrid.gridX = indX % mapCubeArrayLength;
-                thisGrid.gridY = indY % mapCubeArrayLength;
-
-                // if sub-map is not created yet
-                if (mapArrayInd[thisGrid.cubeX][thisGrid.cubeY] == -1) {
-                    continue;
-                }
-                
-                mapCell_t *thisCell = grid2Cell(&thisGrid);
-
-                PointType thisPoint;
-                thisPoint.x = thisCell->xyz->x;
-                thisPoint.y = thisCell->xyz->y;
-                thisPoint.z = thisCell->xyz->z;
-                // too far, not accurate
-                if (pointDistance(thisPoint, robotPoint) >= traversabilityCalculatingDistance)
-                    continue;
-                // Find neighbor cells of this center cell
-                
-                vector<mapCell_t*> mapCellVector = findNeighborElevations(thisCell);
-
-                vector<float> xyzVector;
-                for (auto& cell : mapCellVector) {
-                    xyzVector.push_back(cell->xyz->x);
-                    xyzVector.push_back(cell->xyz->y);
-                    xyzVector.push_back(cell->xyz->z);
-                }
-                if (xyzVector.size() <= 2)
-                    continue;
-                // matPoints: n * 3 matrix
-                Eigen::MatrixXf matPoints = Eigen::Map<const Eigen::Matrix<float, -1, -1, Eigen::RowMajor>>(xyzVector.data(), xyzVector.size() / 3, 3);
-                
-                
-                // min and max elevation
-                float minElevation = matPoints.col(2).minCoeff();
-                float maxElevation = matPoints.col(2).maxCoeff();
-                float maxDifference = maxElevation - minElevation;
-                thisCell->step_diff = maxDifference;
-
-                // slope
-                Eigen::MatrixXf centered = matPoints.rowwise() - matPoints.colwise().mean(); // 中心化
-                Eigen::MatrixXf cov = (centered.adjoint() * centered); //协方差矩阵
-                cv::eigen2cv(cov, matCov); // copy data from eigen to cv::Mat
-                cv::eigen(matCov, matEig, matVec); // find eigenvalues and eigenvectors for the covariance matrix
-                float slopeAngle = std::acos(std::abs(matVec.at<float>(2, 2))) / M_PI * 180;
-                if (slopeAngle < filterAngleLimit) {
-                    thisCell->slope_traversability = 1 - slopeAngle / filterAngleLimit;
-                }
-                else {
-                    thisCell->slope_traversability = 0;
-                }
-                
-                // roughness
-                Eigen::Vector3f norm(matVec.at<float>(2,0),matVec.at<float>(2,1),matVec.at<float>(2,2)); // normal vector
-                Eigen::Vector3f mean = matPoints.colwise().mean();
-                float planeParam = mean.transpose() * norm;
-                Eigen::MatrixXf res = matPoints * norm;
-                res.array() -= planeParam;
-                double roughness = sqrt(res.squaredNorm() / (xyzVector.size() - 1));
-                double roughnessThresh_ = 0.01;
-                if (roughness < roughnessThresh_) {
-                    thisCell->roughness_traversability = 1 - roughness / roughnessThresh_;
-                }
-                else {
-                    thisCell->roughness_traversability = 0;
-                }
-            }
-        }
-        
-        // second iteration
-        for (int i = 0; i < localMapArrayLength; i++) {
-            for (int j = 0; j < localMapArrayLength; j++) {
-                // only compute local traversability
-                int indX = localMapOriginGrid.gridX + i;
-                int indY = localMapOriginGrid.gridY + j;
-
-                grid_t thisGrid;
-
-                thisGrid.cubeX = localMapOriginGrid.cubeX + indX / mapCubeArrayLength;
-                thisGrid.cubeY = localMapOriginGrid.cubeY + indY / mapCubeArrayLength;
-
-                thisGrid.gridX = indX % mapCubeArrayLength;
-                thisGrid.gridY = indY % mapCubeArrayLength;
-
-                // if sub-map is not created yet
-                if (mapArrayInd[thisGrid.cubeX][thisGrid.cubeY] == -1) {
-                    continue;
-                }
-                
-                mapCell_t *thisCell = grid2Cell(&thisGrid);
-                int stepThresh_ = 0.3;
-                int nCellCritical_ = 5;
-                PointType thisPoint;
-                thisPoint.x = thisCell->xyz->x;
-                thisPoint.y = thisCell->xyz->y;
-                thisPoint.z = thisCell->xyz->z;
-                // too far, not accurate
-                if (pointDistance(thisPoint, robotPoint) >= traversabilityCalculatingDistance)
-                    continue;
-                // Find neighbor cells of this center cell
-                vector<mapCell_t*> mapCellVector = findNeighborElevations(thisCell); // 替换掉，第二次遍历需要返回mapCell_t
-                if (mapCellVector.size() <= 2)
-                    continue;
-
-                double stepMax = 0.0;
-                int nCells = 0;
-                for (auto& cell : mapCellVector) {
-                    if (cell->step_diff > stepMax) {stepMax = cell->step_diff;}
-                    if (cell->step_diff > stepThresh_) {nCells++;}
-                }
-                double step;
-                // cout << "step max = " << stepMax << endl;
-                step = std::min(stepMax, (double) nCells / (double) nCellCritical_ * stepMax);
-                if (step < stepThresh_) {
-                    thisCell->step_traversability = 1.0 - step / stepThresh_;
-                }
-                else {
-                    thisCell->step_traversability = 0.0;
-                }
-
-                double w_step = 0.5;
-                double w_slope = 0.25;
-                double w_roughness = 0.25;
-                double traversability = w_step * thisCell->step_traversability + w_slope * thisCell->slope_traversability + w_roughness * thisCell->roughness_traversability;
-                
-                if (thisCell->elevation != -FLT_MAX) {
-                    int index = i + j * localMapArrayLength;
-                    res.occupancy.data[index] = traversability * 100 < 20 ? 100 : 0;
-                }
-                
-            }
-        }
-        
-        return true;
-    }
-    */
+    
     void allocateMemory(){
         // allocate memory for point cloud
         laserCloud.reset(new pcl::PointCloud<PointType>());
@@ -363,13 +173,7 @@ public:
         // update cell
         thisCell->updateOccupancy(occupancy);
     }
-    /*
-    // 试一下完全从elevation map计算traversability
-    void updateCellOccupancy(mapCell_t *thisCell, PointType *point) {
-        float occupancy = point->intensity;
-        thisCell->updateOccupancy(occupancy);
-    }
-    */
+
     void updateCellElevation(mapCell_t *thisCell, PointType *point, const float timestamp){
         // Kalman Filter: update cell elevation using Kalman filter
         // https://www.cs.cornell.edu/courses/cs4758/2012sp/materials/MI63slides.pdf
@@ -380,32 +184,6 @@ public:
             thisCell->elevationVar = pointDistance(robotPoint, *point);
             return;
         }
-        /*
-        // added by dyx @  6.26: adopt updating rules in ETH elevation mapping 
-        float height_p = point->z;
-        float elevation_pre = thisCell->elevation;
-        float elevationVar_pre = thisCell->elevationVar;
-        float dist_mahalanobis = fabs(elevation_pre - height_p) / sqrt(elevationVar_pre);
-        float elevation_thresh = 2.5;
-        if (dist_mahalanobis > elevation_thresh) {
-            if (timestamp - thisCell->time <= 1.0 && elevation_pre > height_p) {
-                ;
-            }
-            else if (timestamp - thisCell->time <= 1.0) {
-                thisCell->updateElevation(point->z, pointDistance(robotPoint, *point));
-            }
-            else {
-                thisCell->updateElevation(elevation_pre, elevationVar_pre + pow(0.003, 2));
-            }
-            
-        }
-        else {
-            float R = pointDistance(robotPoint, *point);
-            float elevation_final = (elevation_pre * R + height_p * elevationVar_pre) / (R + elevationVar_pre);
-            float elevationVar_final = R * elevationVar_pre / (R + elevationVar_pre);
-            thisCell->updateElevation(elevation_final, elevationVar_final);
-        }
-        */
 
         // previous kalman filter
         // Predict:
@@ -519,16 +297,18 @@ public:
             // matPoints: n * 3 matrix
             Eigen::MatrixXf matPoints = Eigen::Map<const Eigen::Matrix<float, -1, -1, Eigen::RowMajor>>(xyzVector.data(), xyzVector.size() / 3, 3);
             
-            // min and max elevation
-            // float minElevation = matPoints.col(2).minCoeff();
-            // float maxElevation = matPoints.col(2).maxCoeff();
-            // float maxDifference = maxElevation - minElevation;
+            /*
+            //* min and max elevation
+            float minElevation = matPoints.col(2).minCoeff();
+            float maxElevation = matPoints.col(2).maxCoeff();
+            float maxDifference = maxElevation - minElevation;
             
-            // if (maxDifference > filterHeightLimit){
-            //     thisPoint.intensity = 100;
-            //     updateCellOccupancy(thisCell, &thisPoint);
-            //     continue;
-            // }
+            if (maxDifference > filterHeightLimit){
+                thisPoint.intensity = 100;
+                updateCellOccupancy(thisCell, &thisPoint);
+                continue;
+            }
+            */
             
             
             
@@ -543,19 +323,10 @@ public:
             
             if (slopeAngle > filterAngleLimit) {
                 thisPoint.intensity = 100;
-                // updateCellOccupancy(thisCell, &thisPoint);
+                updateCellOccupancy(thisCell, &thisPoint);
                 continue;
             }
-            /*
-            else {
-                if (thisPoint.intensity = 100) {
-                    thisPoint.intensity = 0;
-                }
-            }
-            */
-            
-            // updateCellOccupancy(thisCell,&thisPoint);
-            
+
             
 
             /*
@@ -576,27 +347,6 @@ public:
             }
             */
             
-            
-
-            // Debug
-            // std::cout <<"center point : (" << thisPoint.x << "," << thisPoint.y << ")";
-            // std::cout << " roughness = " << roughness << endl;
-            // if (thisPoint.y >= 1.5 && thisPoint.y <= 2.5 && std::abs(thisPoint.x) <= 5.0) {
-            //     std::cout <<"center point : (" << thisPoint.x << "," << thisPoint.y << ")";
-            //     std::cout << " neighbor points:" << endl << matPoints << endl;
-            //     std::cout << " slopeAngle = " << slopeAngle << endl;
-            // }
-            // // float occupancy = 1.0f / (1.0f + exp(-(slopeAngle - filterAngleLimit)));
-
-            // float occupancy = 0.5 * (slopeAngle / filterAngleLimit)
-            //                 + 0.5 * (maxDifference / filterHeightLimit);
-            // thisPoint.intensity = slopeAngle;
-            
-
-            // if (slopeAngle > filterAngleLimit) {
-            //     thisPoint.intensity = 100;
-            //     updateCellOccupancy(thisCell, &thisPoint);
-            // }
         }
     }
     
@@ -644,47 +394,6 @@ public:
         return xyzVector;
     }
     
-    /*
-    vector<mapCell_t*> findNeighborElevations(mapCell_t *centerCell){
-        // new version of find neighbor function (return cell_t rather than x,y,z)
-        vector<mapCell_t*> mapCellVector;
-
-        grid_t centerGrid = centerCell->grid;
-        grid_t thisGrid;
-
-        int footprintRadiusLength = int(robotRadius / mapResolution);
-
-        for (int k = -footprintRadiusLength; k <= footprintRadiusLength; ++k){
-            for (int l = -footprintRadiusLength; l <= footprintRadiusLength; ++l){
-                // skip grids too far
-                if (std::sqrt(float(k*k + l*l)) * mapResolution > robotRadius)
-                    continue;
-                // the neighbor grid
-                thisGrid.cubeX = centerGrid.cubeX;
-                thisGrid.cubeY = centerGrid.cubeY;
-                thisGrid.gridX = centerGrid.gridX + k;
-                thisGrid.gridY = centerGrid.gridY + l;
-                // If the checked grid is in another sub-map, update it's indexes
-                if(thisGrid.gridX < 0){ --thisGrid.cubeX; thisGrid.gridX = thisGrid.gridX + mapCubeArrayLength;
-                }else if(thisGrid.gridX >= mapCubeArrayLength){ ++thisGrid.cubeX; thisGrid.gridX = thisGrid.gridX - mapCubeArrayLength; }
-                if(thisGrid.gridY < 0){ --thisGrid.cubeY; thisGrid.gridY = thisGrid.gridY + mapCubeArrayLength;
-                }else if(thisGrid.gridY >= mapCubeArrayLength){ ++thisGrid.cubeY; thisGrid.gridY = thisGrid.gridY - mapCubeArrayLength; }
-                // If the sub-map that the checked grid belongs to is empty or not
-                int mapInd = mapArrayInd[thisGrid.cubeX][thisGrid.cubeY];
-                if (mapInd == -1) continue;
-                // the neighbor cell
-                mapCell_t *thisCell = grid2Cell(&thisGrid);
-                // save neighbor cell for calculating traversability
-                
-                if (thisCell->elevation != -FLT_MAX && !std::isnan(thisCell->xyz->z)){
-                    mapCellVector.push_back(thisCell);
-                }
-            }
-        }
-
-        return mapCellVector;
-    }
-    */
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     /////////////////////////////////////// Occupancy Map (local) //////////////////////////////////////////////////

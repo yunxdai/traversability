@@ -15,7 +15,7 @@ private:
     ros::Publisher pubLaserScan;
     // Point Cloud
     pcl::PointCloud<PointType>::Ptr laserCloudRaw; // raw cloud from /velodyne_points
-    pcl::PointCloud<PointType>::Ptr laserCloudIn; // projected full velodyne cloud
+    pcl::PointCloud<PointType>::Ptr laserCloudIn; // projected full velodyne cloud, intensity storing range information
     pcl::PointCloud<PointXYZIR>::Ptr laserCloudInRing; // full cloud with ring 
     pcl::PointCloud<PointType>::Ptr laserCloudOut; // filtered and downsampled point cloud
     pcl::PointCloud<PointType>::Ptr laserCloudObstacles; // cloud for saving points that are classified as obstables, convert them to laser scan
@@ -31,7 +31,7 @@ private:
     // Matrice
     cv::Mat obstacleMatrix; // -1 - invalid, 0 - free, 1 - obstacle
     cv::Mat rangeMatrix; // -1 - invalid, >0 - valid range value
-    cv::Mat intensityMatrix;
+    cv::Mat intensityMatrix; // store point's intensity in matrix format
     // laser scan message
     sensor_msgs::LaserScan laserScan;
     // for downsample
@@ -47,7 +47,6 @@ public:
         nh("~"){
         // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/full_cloud_info", 5, &TraversabilityFilter::cloudHandler, this);
         subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 5, &TraversabilityFilter::cloudHandler, this);
-        // subCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_cloud_registered_output", 5, &TraversabilityFilter::cloudHandler, this);
         pubCloud = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud", 5);
         pubCloudVisualHiRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_high_res", 5);
         pubCloudVisualLowRes = nh.advertise<sensor_msgs::PointCloud2> ("/filtered_pointcloud_visual_low_res", 5);
@@ -149,7 +148,7 @@ public:
     
     void velodyne2RangeCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
         
-        // transform raw point cloud into range image format
+        // fill laserCloudIn as LeGO-LOAM format from raw velodyne points
         pcl::fromROSMsg(*laserCloudMsg, *laserCloudRaw);
         std::vector<int> indices;
         pcl::removeNaNFromPointCloud(*laserCloudRaw,*laserCloudRaw,indices);
@@ -208,7 +207,6 @@ public:
         }
     }
 
-
     void extractRawCloud(){
         // ROS msg -> PCL cloud
         // This function takes need call of function "velodyne2RangeCloud"
@@ -261,12 +259,12 @@ public:
     void applyFilter(){
 
         if (urbanMapping == true){
-            positiveCurbFilter2();
+            positiveCurbFilter_v2();
             negativeCurbFilter();
         }
         // negativeCurbFilter();
-        // slopeFilter();
-        // intensityFilter();
+        slopeFilter();
+        intensityFilter();
     }
     /*
     void positiveCurbFilter() // positive curb filter基本没用，有巨大问题
@@ -313,45 +311,12 @@ public:
         }
     }
     */
-    void positiveCurbFilter3()
-    {
-        pcl::NormalEstimation<PointType, pcl::Normal> n;
-        pcl::PointCloud<pcl::Normal>::Ptr normals(new pcl::PointCloud<pcl::Normal>);
-        //建立kdtree来进行近邻点集搜索
-        pcl::search::KdTree<PointType>::Ptr tree(new pcl::search::KdTree<PointType>);
-        pcl::PointCloud<PointType>::Ptr laserCloudforNormal(new pcl::PointCloud<PointType>);
-        std::vector<int> indices;
-        laserCloudIn->is_dense = false;
-        pcl::removeNaNFromPointCloud(*laserCloudIn, *laserCloudforNormal, indices);
-        // cout << laserCloudIn->points.size() << " " << laserCloudforNormal->points.size() << endl;
-        tree->setInputCloud(laserCloudforNormal); 
-        n.setInputCloud(laserCloudforNormal);
-        n.setSearchMethod(tree);
-        n.setKSearch(7);
-        n.setViewPoint(0.0f, 0.0f, sensorHeight);
-        n.compute(*normals);
 
-        for (int i = 0; i < scanNumCurbFilter; i++) {
-            for (int j = 0; j < Horizon_SCAN; j++) {
-                if (obstacleMatrix.at<int>(i,j) == 1) {
-                    continue;
-                }
-                if (rangeMatrix.at<float>(i, j) > sensorRangeLimit || rangeMatrix.at<float>(i,j) == -1) {
-                    continue;
-                }
-                int index = j + i * Horizon_SCAN;
-                if (std::find(indices.begin(), indices.end(), index) != indices.end()) {
-                    float dot = normals->at(index).getNormalVector3fMap().normalized().dot(Eigen::Vector3f::UnitZ());
-                    if(std::abs(dot) > std::cos(70.0 * M_PI / 180.0)) {
-                        obstacleMatrix.at<int>(i,j) = 1;
-                    }
-                }
-            }
-        }
-    }
 
-    void positiveCurbFilter2()
+    void positiveCurbFilter_v2()
     {
+        //* second version of positive filter
+        //* checking the normal vector of the neighbor points
         int rangeNormCalculation = 6;
         for (int i = 0; i < scanNumCurbFilter; i++) {
             for (int j = rangeNormCalculation; j < Horizon_SCAN - rangeNormCalculation; j++) {
@@ -400,29 +365,16 @@ public:
                 normal /= normal.norm();
                 // cout << "normal = " << normal.transpose() << endl;
                 float slopeAngle = std::acos(std::fabs(normal(2))) / M_PI * 180;
-                // cout << "slope angle = " << slopeAngle << endl;
-                // Eigen::Matrix3Xf points = matPoints.transpose();
-                // Eigen::Matrix3Xf center = points.colwise() - points.rowwise().mean();
-                // int setting = Eigen::ComputeFullU | Eigen::ComputeThinV;
-                // Eigen::JacobiSVD<Eigen::Matrix3Xf> svd = center.jacobiSvd(setting);
-                // Eigen::Matrix3Xf U = svd.matrixU();
-                // Eigen::Vector3f normal = U.col(2);
-                // float slopeAngle = getDegAngle(normal, Eigen::Vector3f(0,0,1));
                 if(fabs(slopeAngle - 90) > 10.0) {obstacleMatrix.at<int>(i,j) = 1;}
             }
         }
     }
-    double getDegAngle(Eigen::Vector3f v1, Eigen::Vector3f v2) 
+
+    /* 
+    void positiveCurbFilter()
     {
-        
-        //one method, radian_angle belong to 0~pi
-        //double radian_angle = atan2(v1.cross(v2).transpose() * (v1.cross(v2) / v1.cross(v2).norm()), v1.transpose() * v2);
-        //another method, radian_angle belong to 0~pi
-        double radian_angle = atan2(v1.cross(v2).norm(), v1.transpose() * v2);
-        return radian_angle * 180 / M_PI;
-    }
-    void positiveCurbFilter() // positive curb 有用了但是噪声不少
-    {
+        //* first version of customized positive curb filter
+        //* checking the monotonicity of the neighbor points
         int rangeCompareNeighborNum = 3;
         float diff[Horizon_SCAN - 1];
 
@@ -476,6 +428,8 @@ public:
         }
         return true;
     }
+    */
+    
     void negativeCurbFilter(){
         int rangeCompareNeighborNum = 3;
 
@@ -548,6 +502,7 @@ public:
     }
 
     void intensityFilter() {
+        //* filter traversable points using intensity, only tested on HALL7's sidewalk
         for (int i = 0; i < N_SCAN; i++) {
             for (int j = 0; j < Horizon_SCAN; j++) {
                 // Point that has been verified by other filters
@@ -596,7 +551,7 @@ public:
     }
 
     void downsampleCloud(){
-
+        //* downsample raw cloud to grid
         float roundedX = float(int(robotPoint.x * 10.0f)) / 10.0f;
         float roundedY = float(int(robotPoint.y * 10.0f)) / 10.0f;
         // height map origin
@@ -714,7 +669,7 @@ public:
     }
 
     void predictCloudBGK(){
-
+        //*  BGK inference to produce more point info
         if (predictionEnableFlag == false)
             return;
 
@@ -730,7 +685,7 @@ public:
                 testPoint.y = localMapOrigin.y + j * mapResolution + mapResolution / 2.0;
                 testPoint.z = robotPoint.z; // this value is not used except for computing distance with robotPoint
                 // skip grids too far
-                if (pointDistance(testPoint, robotPoint) > sensorRangeLimit) // 所以这里算的其实是水平距离
+                if (pointDistance(testPoint, robotPoint) > sensorRangeLimit) 
                     continue;
                 // Training data
                 vector<float> xTrainVec; // training data x and y coordinates
