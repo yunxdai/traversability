@@ -120,7 +120,7 @@ public:
 
     ~TraversabilityFilter(){}
 
-
+    // * main callback
     void cloudHandler(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg){
         
         velodyne2RangeCloud(laserCloudMsg);
@@ -145,10 +145,11 @@ public:
 
         resetParameters();
     }
-    
-    void velodyne2RangeCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
+
+    // * fill laserCloudIn as LeGO-LOAM format from raw velodyne points
+    void velodyne2RangeCloud(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg)
+    {
         
-        // fill laserCloudIn as LeGO-LOAM format from raw velodyne points
         pcl::fromROSMsg(*laserCloudMsg, *laserCloudRaw);
         std::vector<int> indices;
         pcl::removeNaNFromPointCloud(*laserCloudRaw,*laserCloudRaw,indices);
@@ -207,7 +208,9 @@ public:
         }
     }
 
-    void extractRawCloud(){
+    // * extract range information from point cloud
+    void extractRawCloud()
+    {
         // ROS msg -> PCL cloud
         // This function takes need call of function "velodyne2RangeCloud"
         int nPoints = laserCloudIn->points.size();
@@ -225,7 +228,9 @@ public:
         }
     }
 
-    bool transformCloud(){
+    // * transform point cloud under different coordinate
+    bool transformCloud()
+    {
         // Listen to the TF transform and prepare for point cloud transformation
         try{listener.lookupTransform("map","base_link", ros::Time(0), transform); }
         // try{listener.lookupTransform("map","base_link", pcMsgTimeStamp, transform); }
@@ -245,8 +250,9 @@ public:
         return true;
     }
 
-    void cloud2Matrix(){
-
+    // * convert point cloud into matrix
+    void cloud2Matrix()
+    {
         for (int i = 0; i < N_SCAN; ++i){
             for (int j = 0; j < Horizon_SCAN; ++j){
                 int index = j  + i * Horizon_SCAN;
@@ -256,7 +262,9 @@ public:
         }
     }
 
-    void applyFilter(){
+    // * apply multiple geometric filters for obstacle detection
+    void applyFilter()
+    {
 
         if (urbanMapping == true){
             positiveCurbFilter_v2();
@@ -266,8 +274,10 @@ public:
         slopeFilter();
         intensityFilter();
     }
+
     /*
-    void positiveCurbFilter() // positive curb filter基本没用，有巨大问题
+    // * original version of the positive filter
+    void positiveCurbFilter()
     {
         int rangeCompareNeighborNum = 3;
         float diff[Horizon_SCAN - 1];
@@ -312,11 +322,10 @@ public:
     }
     */
 
-
+   // * second version of positive filter, by checking the normal vector of the neighbor points
     void positiveCurbFilter_v2()
     {
-        //* second version of positive filter
-        //* checking the normal vector of the neighbor points
+
         int rangeNormCalculation = 6;
         for (int i = 0; i < scanNumCurbFilter; i++) {
             for (int j = rangeNormCalculation; j < Horizon_SCAN - rangeNormCalculation; j++) {
@@ -371,10 +380,9 @@ public:
     }
 
     /* 
+    // * first version of customized positive curb filter, by checking the monotonicity of the neighbor points
     void positiveCurbFilter()
     {
-        //* first version of customized positive curb filter
-        //* checking the monotonicity of the neighbor points
         int rangeCompareNeighborNum = 3;
         float diff[Horizon_SCAN - 1];
 
@@ -430,6 +438,7 @@ public:
     }
     */
     
+    // * filter for negative curb structures
     void negativeCurbFilter(){
         int rangeCompareNeighborNum = 3;
 
@@ -464,6 +473,7 @@ public:
         }
     }
 
+    // * filter for slope structures
     void slopeFilter(){
         
         for (int i = 0; i < scanNumSlopeFilter; ++i){
@@ -501,8 +511,8 @@ public:
         }
     }
 
+    // * filter traversable regions using intensity, only tested on HALL7's sidewalk
     void intensityFilter() {
-        //* filter traversable points using intensity, only tested on HALL7's sidewalk
         for (int i = 0; i < N_SCAN; i++) {
             for (int j = 0; j < Horizon_SCAN; j++) {
                 // Point that has been verified by other filters
@@ -521,6 +531,7 @@ public:
         }
     }
 
+    // * labelled obstacle & free regions according to filter results
     void extractFilteredCloud(){
         for (int i = 0; i < scanNumMax; ++i){
             for (int j = 0; j < Horizon_SCAN; ++j){
@@ -550,8 +561,8 @@ public:
         }
     }
 
+    //* downsample raw cloud to grid
     void downsampleCloud(){
-        //* downsample raw cloud to grid
         float roundedX = float(int(robotPoint.x * 10.0f)) / 10.0f;
         float roundedY = float(int(robotPoint.y * 10.0f)) / 10.0f;
         // height map origin
@@ -667,9 +678,10 @@ public:
             pubCloudVisualLowRes.publish(laserCloudTemp);
         }
     }
-
+    
+    //*  BGK inference to produce more point info
     void predictCloudBGK(){
-        //*  BGK inference to produce more point info
+        
         if (predictionEnableFlag == false)
             return;
 

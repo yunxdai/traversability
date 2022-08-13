@@ -29,7 +29,6 @@ private:
     // Map Arrays
     int mapArrayCount;
     int **mapArrayInd; // it saves the index of this submap in vector mapArray
-    // int **predictionArrayFlag;
     vector<childMap_t*> mapArray;
 
     // Local Map Extraction
@@ -81,14 +80,6 @@ public:
             for (int j = 0; j < mapArrayLength; ++j)
                 mapArrayInd[i][j] = -1;
 
-        // initialize array for predicting elevation sub-maps
-        // predictionArrayFlag = new int*[mapArrayLength];
-        // for (int i = 0; i < mapArrayLength; ++i)
-        //     predictionArrayFlag[i] = new int[mapArrayLength];
-
-        // for (int i = 0; i < mapArrayLength; ++i)
-        //     for (int j = 0; j < mapArrayLength; ++j)
-        //         predictionArrayFlag[i][j] = false;
 
         // Matrix Initialization
         matCov = cv::Mat (3, 3, CV_32F, cv::Scalar::all(0));
@@ -118,6 +109,7 @@ public:
         publishMap();
     }
 
+    // * update elevation map
     void updateElevationMap(const float timestamp){
         int cloudSize = laserCloud->points.size();
         for (int i = 0; i < cloudSize; ++i){
@@ -126,6 +118,7 @@ public:
         }
     }
 
+    // * update elevation map point by point
     void updateElevationMap(PointType *point, const float timestamp){
         // Find point index in global map
         grid_t thisGrid;
@@ -140,15 +133,16 @@ public:
         updateCellObservationTime(thisCell);
     }
 
+    // * update observation time of cells in the elevation map
     void updateCellObservationTime(mapCell_t *thisCell){
         ++thisCell->observeTimes;
         // 在当前输入中有对应点的cell，且被观测到的时间超过阈值，就会被加到这个list（然后被丢去计算traversability）
         if (thisCell->observeTimes >= traversabilityObserveTimeTh)
             observingList1.push_back(thisCell);
     }
-    
+
+    // * update occupancy probability of cells in the elevation map
     void updateCellOccupancy(mapCell_t *thisCell, PointType *point)
-    // 这个updating函数可能也有问题
     {
         // Update log_odds
         float p;  // Probability of being occupied knowing current measurement.
@@ -174,6 +168,7 @@ public:
         thisCell->updateOccupancy(occupancy);
     }
 
+    // * update elevation information of cells in the elevation map
     void updateCellElevation(mapCell_t *thisCell, PointType *point, const float timestamp){
         // Kalman Filter: update cell elevation using Kalman filter
         // https://www.cs.cornell.edu/courses/cs4758/2012sp/materials/MI63slides.pdf
@@ -262,7 +257,8 @@ public:
     }
     
 
-    
+    // * compute traversability on cell-level
+    // * 3 metrics are considered: elevation difference, slope, roughness
     void traversabilityMapCalculation(){
 
         // no new scan, return
